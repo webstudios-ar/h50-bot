@@ -17,6 +17,12 @@ const CANAL_H50 = '1362506087818854540';
 const TIENDAS   = ['tienda1', 'tienda2', 'tienda3'];
 const CANAL_SECUESTRO    = '1363375107078361098';
 const CANAL_ESPERANDO    = '1355660648910032976';
+const CANAL_EXAMEN       = '1347421594137530459';
+const CANAL_INSTRUCTORES = '1347421603935424525';
+const ROL_INSTRUCTORES   = '1347421483164766329';
+
+// Mapa de postulantes esperando examen: { userId: { entro: timestamp, avisos: 0, intervalo: intervalId } }
+const esperandoExamen = {};
 const CANAL_LOGS         = '1495016854807121980';
 
 // Registro de origen: { canalRobo: { userId: canalOrigen } }
@@ -198,6 +204,71 @@ async function asignarPersonal(interaction, roboKey, robo, cantidad, ubicacion) 
 }
 
 // ==================== READY ====================
+// ==================== MONITOREO DE EXAMEN ====================
+async function enviarAvisoExamen(guild, userId, numeroAviso) {
+  try {
+    const canal = await guild.channels.fetch(CANAL_INSTRUCTORES);
+    const tiempoEspera = Math.floor((Date.now() - esperandoExamen[userId]?.entro) / 60000);
+    const tiempoTexto = tiempoEspera <= 0 ? 'menos de 1 minuto' : tiempoEspera + ' minuto' + (tiempoEspera !== 1 ? 's' : '');
+
+    let titulo, color;
+    if (numeroAviso === 1) {
+      titulo = '📋 HAY UN POSTULANTE ESPERANDO EXAMEN';
+      color = 0xFFD700;
+    } else {
+      titulo = '⚠️ AVISO #' + numeroAviso + ' — POSTULANTE SIN ATENCIÓN';
+      color = 0xCC2222;
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle(titulo)
+      .setDescription('<@' + userId + '> está esperando en <#' + CANAL_EXAMEN + '> para rendir su examen.')
+      .addFields(
+        { name: '⏱️ Tiempo esperando', value: tiempoTexto, inline: true },
+        { name: '📍 Canal',            value: '<#' + CANAL_EXAMEN + '>', inline: true }
+      )
+      .setColor(color).setTimestamp()
+      .setFooter({ text: 'H50 Bot  •  Sistema de Exámenes' });
+
+    await canal.send({ content: '<@&' + ROL_INSTRUCTORES + '>', embeds: [embed] });
+  } catch (e) { console.error('Error enviando aviso examen:', e.message); }
+}
+
+client.on('voiceStateUpdate', async (oldState, newState) => {
+  const userId = newState.member?.id;
+  if (!userId || newState.member?.user.bot) return;
+
+  // Alguien ENTRA al canal de examen
+  if (newState.channelId === CANAL_EXAMEN && oldState.channelId !== CANAL_EXAMEN) {
+    esperandoExamen[userId] = { entro: Date.now(), avisos: 0 };
+
+    // Primer aviso inmediato
+    esperandoExamen[userId].avisos = 1;
+    await enviarAvisoExamen(newState.guild, userId, 1);
+
+    // Avisos cada 1 minuto si sigue ahí
+    esperandoExamen[userId].intervalo = setInterval(async () => {
+      // Verificar que sigue en el canal
+      const miembro = newState.guild.voiceStates.cache.get(userId);
+      if (!miembro || miembro.channelId !== CANAL_EXAMEN) {
+        clearInterval(esperandoExamen[userId]?.intervalo);
+        delete esperandoExamen[userId];
+        return;
+      }
+      esperandoExamen[userId].avisos++;
+      await enviarAvisoExamen(newState.guild, userId, esperandoExamen[userId].avisos);
+    }, 60000); // cada 1 minuto
+  }
+
+  // Alguien SALE del canal de examen
+  if (oldState.channelId === CANAL_EXAMEN && newState.channelId !== CANAL_EXAMEN) {
+    if (esperandoExamen[userId]) {
+      clearInterval(esperandoExamen[userId].intervalo);
+      delete esperandoExamen[userId];
+    }
+  }
+});
+
 client.once('ready', async () => {
   console.log('H50 Bot conectado: ' + client.user.tag);
 
