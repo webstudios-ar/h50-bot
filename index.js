@@ -260,7 +260,6 @@ client.on('interactionCreate', async (interaction) => {
       return;
     }
     await interaction.deferReply({ ephemeral: true });
-    await interaction.guild.members.fetch();
     const enCanal = interaction.guild.voiceStates.cache
       .filter(vs => vs.channelId === robo.canal && vs.member && !vs.member.user.bot)
       .map(vs => vs.member);
@@ -298,7 +297,6 @@ client.on('interactionCreate', async (interaction) => {
       return;
     }
     await interaction.deferReply({ ephemeral: true });
-    await interaction.guild.members.fetch();
     const enCanal = interaction.guild.voiceStates.cache
       .filter(vs => vs.channelId === robo.canal && vs.member && !vs.member.user.bot)
       .map(vs => vs.member);
