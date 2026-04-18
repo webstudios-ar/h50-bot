@@ -103,7 +103,11 @@ async function asignarPersonal(interaction, roboKey, robo, ubicacion) {
   for (const canalId of CANALES_INDIVIDUALES) {
     try {
       const canal = await guild.channels.fetch(canalId);
-      if (canal && canal.members) canal.members.forEach(m => individuales.push(m));
+      if (canal && canal.members) {
+        canal.members.forEach(m => {
+          if (m.voice?.channelId) individuales.push(m);
+        });
+      }
     } catch (e) {}
   }
 
@@ -111,7 +115,8 @@ async function asignarPersonal(interaction, roboKey, robo, ubicacion) {
     try {
       const canal = await guild.channels.fetch(canalId);
       if (canal && canal.members && canal.members.size > 0) {
-        gruposPatrulla.push([...canal.members.values()]);
+        const grupo = [...canal.members.values()].filter(m => m.voice?.channelId);
+        if (grupo.length > 0) gruposPatrulla.push(grupo);
       }
     } catch (e) {}
   }
@@ -142,8 +147,15 @@ async function asignarPersonal(interaction, roboKey, robo, ubicacion) {
 
   const movidos = [], errores = [];
   for (const persona of asignados) {
-    try { await persona.voice.setChannel(robo.canal); movidos.push(persona); }
-    catch (e) { errores.push(persona.displayName); }
+    try {
+      // Solo se puede mover si esta en un canal de voz
+      if (!persona.voice?.channelId) {
+        errores.push(persona.displayName + ' (sin voz)');
+        continue;
+      }
+      await persona.voice.setChannel(robo.canal);
+      movidos.push(persona);
+    } catch (e) { errores.push(persona.displayName); }
   }
 
   try { await canalDestino.setStatus(ubicacion); } catch (e) {}
