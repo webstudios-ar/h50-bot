@@ -205,28 +205,43 @@ async function asignarPersonal(interaction, roboKey, robo, cantidad, ubicacion) 
 
 // ==================== READY ====================
 // ==================== MONITOREO DE EXAMEN ====================
-async function enviarAvisoExamen(guild, userId, numeroAviso) {
-  try {
-    const canal = await guild.channels.fetch(CANAL_INSTRUCTORES);
-    const tiempoEspera = Math.floor((Date.now() - esperandoExamen[userId]?.entro) / 60000);
-    const tiempoTexto = tiempoEspera <= 0 ? 'menos de 1 minuto' : tiempoEspera + ' minuto' + (tiempoEspera !== 1 ? 's' : '');
+// Un solo intervalo grupal — avisa por todos los que están esperando juntos
+let intervaloExamen = null;
+let contadorAvisos = 0;
 
-    let titulo, color;
-    if (numeroAviso === 1) {
-      titulo = '📋 HAY UN POSTULANTE ESPERANDO EXAMEN';
+async function enviarAvisoGrupal(guild) {
+  try {
+    // Ver quiénes siguen en el canal de examen
+    const enEspera = guild.voiceStates.cache
+      .filter(vs => vs.channelId === CANAL_EXAMEN && vs.member && !vs.member.user.bot)
+      .map(vs => vs.member);
+
+    if (enEspera.length === 0) {
+      // Nadie queda, detener el intervalo
+      if (intervaloExamen) { clearInterval(intervaloExamen); intervaloExamen = null; contadorAvisos = 0; }
+      return;
+    }
+
+    contadorAvisos++;
+    const canal = await guild.channels.fetch(CANAL_INSTRUCTORES);
+    const menciones = enEspera.map(m => '<@' + m.id + '>').join(', ');
+    const cantidad = enEspera.length;
+    const tiempoTexto = contadorAvisos === 1 ? 'menos de 1 minuto' : (contadorAvisos - 1) + ' minuto' + ((contadorAvisos - 1) !== 1 ? 's' : '');
+
+    let titulo, descripcion, color;
+    if (contadorAvisos === 1) {
+      titulo = '📋 ' + (cantidad === 1 ? 'HAY UN POSTULANTE' : 'HAY ' + cantidad + ' POSTULANTES') + ' ESPERANDO EXAMEN';
+      descripcion = menciones + (cantidad === 1 ? ' está' : ' están') + ' esperando en <#' + CANAL_EXAMEN + '> para rendir su examen.';
       color = 0xFFD700;
     } else {
-      titulo = '⚠️ AVISO #' + numeroAviso + ' — POSTULANTE SIN ATENCIÓN';
+      titulo = '⚠️ AVISO #' + contadorAvisos + ' — ' + (cantidad === 1 ? 'POSTULANTE' : cantidad + ' POSTULANTES') + ' SIN ATENCIÓN';
+      descripcion = menciones + (cantidad === 1 ? ' lleva' : ' llevan') + ' **' + tiempoTexto + '** esperando en <#' + CANAL_EXAMEN + '>.';
       color = 0xCC2222;
     }
 
     const embed = new EmbedBuilder()
       .setTitle(titulo)
-      .setDescription('<@' + userId + '> está esperando en <#' + CANAL_EXAMEN + '> para rendir su examen.')
-      .addFields(
-        { name: '⏱️ Tiempo esperando', value: tiempoTexto, inline: true },
-        { name: '📍 Canal',            value: '<#' + CANAL_EXAMEN + '>', inline: true }
-      )
+      .setDescription(descripcion)
       .setColor(color).setTimestamp()
       .setFooter({ text: 'H50 Bot  •  Sistema de Exámenes' });
 
@@ -240,31 +255,28 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
 
   // Alguien ENTRA al canal de examen
   if (newState.channelId === CANAL_EXAMEN && oldState.channelId !== CANAL_EXAMEN) {
-    esperandoExamen[userId] = { entro: Date.now(), avisos: 0 };
+    esperandoExamen[userId] = { entro: Date.now() };
 
-    // Primer aviso inmediato
-    esperandoExamen[userId].avisos = 1;
-    await enviarAvisoExamen(newState.guild, userId, 1);
-
-    // Avisos cada 1 minuto si sigue ahí
-    esperandoExamen[userId].intervalo = setInterval(async () => {
-      // Verificar que sigue en el canal
-      const miembro = newState.guild.voiceStates.cache.get(userId);
-      if (!miembro || miembro.channelId !== CANAL_EXAMEN) {
-        clearInterval(esperandoExamen[userId]?.intervalo);
-        delete esperandoExamen[userId];
-        return;
-      }
-      esperandoExamen[userId].avisos++;
-      await enviarAvisoExamen(newState.guild, userId, esperandoExamen[userId].avisos);
-    }, 60000); // cada 1 minuto
+    // Si no hay intervalo activo, arrancar uno nuevo
+    if (!intervaloExamen) {
+      contadorAvisos = 0;
+      // Primer aviso inmediato
+      await enviarAvisoGrupal(newState.guild);
+      // Avisos cada 1 minuto
+      intervaloExamen = setInterval(() => enviarAvisoGrupal(newState.guild), 60000);
+    }
   }
 
   // Alguien SALE del canal de examen
   if (oldState.channelId === CANAL_EXAMEN && newState.channelId !== CANAL_EXAMEN) {
-    if (esperandoExamen[userId]) {
-      clearInterval(esperandoExamen[userId].intervalo);
-      delete esperandoExamen[userId];
+    delete esperandoExamen[userId];
+    // Si ya no queda nadie, detener el intervalo
+    const quedanEnCanal = newState.guild.voiceStates.cache
+      .filter(vs => vs.channelId === CANAL_EXAMEN && vs.member && !vs.member.user.bot).size;
+    if (quedanEnCanal === 0 && intervaloExamen) {
+      clearInterval(intervaloExamen);
+      intervaloExamen = null;
+      contadorAvisos = 0;
     }
   }
 });
