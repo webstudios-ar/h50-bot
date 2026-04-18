@@ -16,6 +16,9 @@ const GUILD_ID  = '1000882508373688331';
 const CANAL_H50 = '1362506087818854540';
 const TIENDAS   = ['tienda1', 'tienda2', 'tienda3'];
 
+// Registro de origen: { canalRobo: { userId: canalOrigen } }
+const origenPersonal = {};
+
 const CANALES_INDIVIDUALES = [
   '1355660648910032976',
   '1486145617502928958',
@@ -138,6 +141,12 @@ async function asignarPersonal(interaction, roboKey, robo, cantidad, ubicacion) 
     }
   }
 
+  // Guardar canal de origen antes de mover
+  if (!origenPersonal[robo.canal]) origenPersonal[robo.canal] = {};
+  for (const persona of asignados) {
+    origenPersonal[robo.canal][persona.id] = persona.voice?.channelId;
+  }
+
   const movidos = [], errores = [];
   for (const persona of asignados) {
     try {
@@ -201,6 +210,35 @@ client.once('ready', async () => {
     return cmd.toJSON();
   });
 
+  // /liberar y /cancelar con opcion de robo
+  const robosChoices = Object.entries(ROBOS).map(([key, robo]) => ({ name: robo.nombre, value: key }));
+
+  commands.push(
+    new SlashCommandBuilder()
+      .setName('liberar')
+      .setDescription('Mueve a todos del canal del robo a Esperando Asignación')
+      .addStringOption(o => o
+        .setName('robo')
+        .setDescription('El robo a liberar')
+        .setRequired(true)
+        .addChoices(...robosChoices.slice(0, 25))
+      )
+      .toJSON()
+  );
+
+  commands.push(
+    new SlashCommandBuilder()
+      .setName('cancelar')
+      .setDescription('Devuelve a cada persona al canal donde estaba antes')
+      .addStringOption(o => o
+        .setName('robo')
+        .setDescription('El robo a cancelar')
+        .setRequired(true)
+        .addChoices(...robosChoices.slice(0, 25))
+      )
+      .toJSON()
+  );
+
   const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
   try {
     await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
@@ -211,6 +249,85 @@ client.once('ready', async () => {
 // ==================== INTERACTIONS ====================
 client.on('interactionCreate', async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
+
+  // /liberar
+  if (interaction.commandName === 'liberar') {
+    const roboKey = interaction.options.getString('robo');
+    const robo = ROBOS[roboKey];
+    const member = await interaction.guild.members.fetch(interaction.user.id);
+    if (member.voice?.channelId !== CANAL_H50) {
+      await interaction.reply({ content: '❌ Solo podés usar este comando desde el canal de voz **H-50**.', ephemeral: true });
+      return;
+    }
+    await interaction.deferReply({ ephemeral: true });
+    await interaction.guild.members.fetch();
+    const enCanal = interaction.guild.voiceStates.cache
+      .filter(vs => vs.channelId === robo.canal && vs.member && !vs.member.user.bot)
+      .map(vs => vs.member);
+    if (enCanal.length === 0) {
+      await interaction.editReply({ content: '❌ No hay nadie en el canal de **' + robo.nombre + '**.' });
+      return;
+    }
+    const movidos = [], errores = [];
+    for (const persona of enCanal) {
+      try {
+        await persona.voice.setChannel(CANALES_INDIVIDUALES[0]); // Esperando Asignacion
+        movidos.push(persona);
+      } catch (e) { errores.push(persona.displayName); }
+    }
+    // Limpiar registro de origen
+    delete origenPersonal[robo.canal];
+    const embed = new EmbedBuilder()
+      .setTitle('✅ LIBERADOS — ' + robo.nombre.toUpperCase())
+      .setDescription('El siguiente personal fue devuelto a **Esperando Asignación**:')
+      .addFields({ name: '👮 Personal liberado', value: movidos.map(m => '<@' + m.id + '>').join('
+') || 'Ninguno', inline: false })
+      .setColor(0x00CC66).setTimestamp()
+      .setFooter({ text: 'H50 Bot  •  Sistema de Asignación' });
+    if (errores.length > 0) embed.addFields({ name: '⚠️ No se pudieron mover', value: errores.join(', '), inline: false });
+    await interaction.editReply({ embeds: [embed] });
+    return;
+  }
+
+  // /cancelar
+  if (interaction.commandName === 'cancelar') {
+    const roboKey = interaction.options.getString('robo');
+    const robo = ROBOS[roboKey];
+    const member = await interaction.guild.members.fetch(interaction.user.id);
+    if (member.voice?.channelId !== CANAL_H50) {
+      await interaction.reply({ content: '❌ Solo podés usar este comando desde el canal de voz **H-50**.', ephemeral: true });
+      return;
+    }
+    await interaction.deferReply({ ephemeral: true });
+    await interaction.guild.members.fetch();
+    const enCanal = interaction.guild.voiceStates.cache
+      .filter(vs => vs.channelId === robo.canal && vs.member && !vs.member.user.bot)
+      .map(vs => vs.member);
+    if (enCanal.length === 0) {
+      await interaction.editReply({ content: '❌ No hay nadie en el canal de **' + robo.nombre + '**.' });
+      return;
+    }
+    const origenes = origenPersonal[robo.canal] || {};
+    const movidos = [], errores = [];
+    for (const persona of enCanal) {
+      const canalOrigen = origenes[persona.id] || CANALES_INDIVIDUALES[0];
+      try {
+        await persona.voice.setChannel(canalOrigen);
+        movidos.push({ persona, canalOrigen });
+      } catch (e) { errores.push(persona.displayName); }
+    }
+    delete origenPersonal[robo.canal];
+    const embed = new EmbedBuilder()
+      .setTitle('↩️ CANCELADO — ' + robo.nombre.toUpperCase())
+      .setDescription('El robo fue cancelado. Personal devuelto a su canal de origen:')
+      .addFields({ name: '👮 Personal devuelto', value: movidos.map(({ persona, canalOrigen }) => '<@' + persona.id + '> → <#' + canalOrigen + '>').join('
+') || 'Ninguno', inline: false })
+      .setColor(0xFFAA00).setTimestamp()
+      .setFooter({ text: 'H50 Bot  •  Sistema de Asignación' });
+    if (errores.length > 0) embed.addFields({ name: '⚠️ No se pudieron mover', value: errores.join(', '), inline: false });
+    await interaction.editReply({ embeds: [embed] });
+    return;
+  }
 
   const roboKey = interaction.commandName;
   const robo = ROBOS[roboKey];
