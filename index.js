@@ -280,8 +280,7 @@ client.on('interactionCreate', async (interaction) => {
     const embed = new EmbedBuilder()
       .setTitle('✅ LIBERADOS — ' + robo.nombre.toUpperCase())
       .setDescription('El siguiente personal fue devuelto a **Esperando Asignación**:')
-      .addFields({ name: '👮 Personal liberado', value: movidos.map(m => '<@' + m.id + '>').join('
-') || 'Ninguno', inline: false })
+      .addFields({ name: '👮 Personal liberado', value: movidos.map(m => '<@' + m.id + '>').join('\n') || 'Ninguno', inline: false })
       .setColor(0x00CC66).setTimestamp()
       .setFooter({ text: 'H50 Bot  •  Sistema de Asignación' });
     if (errores.length > 0) embed.addFields({ name: '⚠️ No se pudieron mover', value: errores.join(', '), inline: false });
@@ -320,8 +319,7 @@ client.on('interactionCreate', async (interaction) => {
     const embed = new EmbedBuilder()
       .setTitle('↩️ CANCELADO — ' + robo.nombre.toUpperCase())
       .setDescription('El robo fue cancelado. Personal devuelto a su canal de origen:')
-      .addFields({ name: '👮 Personal devuelto', value: movidos.map(({ persona, canalOrigen }) => '<@' + persona.id + '> → <#' + canalOrigen + '>').join('
-') || 'Ninguno', inline: false })
+      .addFields({ name: '👮 Personal devuelto', value: movidos.map(({ persona, canalOrigen }) => '<@' + persona.id + '> → <#' + canalOrigen + '>').join('\n') || 'Ninguno', inline: false })
       .setColor(0xFFAA00).setTimestamp()
       .setFooter({ text: 'H50 Bot  •  Sistema de Asignación' });
     if (errores.length > 0) embed.addFields({ name: '⚠️ No se pudieron mover', value: errores.join(', '), inline: false });
