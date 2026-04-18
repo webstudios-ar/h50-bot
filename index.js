@@ -10,6 +10,8 @@ const client = new Client({
 });
 
 const GUILD_ID  = '1000882508373688331';
+const TIENDAS = ['tienda1', 'tienda2', 'tienda3'];
+const ubicacionesPendientes = {}; // { userId_roboKey: ubicacion }
 const CANAL_H50 = '1362506087818854540';
 
 // Canales individuales (se asignan de a uno)
@@ -96,13 +98,17 @@ const INFO_ROBOS = {
 client.once('ready', async () => {
   console.log('H50 Bot conectado: ' + client.user.tag);
 
-  const commands = Object.entries(ROBOS).map(([key, robo]) =>
-    new SlashCommandBuilder()
+  const TIENDAS = ['tienda1', 'tienda2', 'tienda3'];
+  const commands = Object.entries(ROBOS).map(([key, robo]) => {
+    const cmd = new SlashCommandBuilder()
       .setName(key.toLowerCase())
-      .setDescription('Asignar personal al robo: ' + robo.nombre)
-      .addStringOption(o => o.setName('ubicacion').setDescription('Nombre específico del lugar (ej: Licorería Vespucio)').setRequired(false))
-      .toJSON()
-  );
+      .setDescription('Asignar personal al robo: ' + robo.nombre);
+    // Solo las tiendas tienen opcion de ubicacion
+    if (!TIENDAS.includes(key)) {
+      return cmd.toJSON();
+    }
+    return cmd.toJSON(); // Las tiendas usan modal, no opcion de slash
+  });
 
   const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
   try {
@@ -112,6 +118,24 @@ client.once('ready', async () => {
 });
 
 client.on('interactionCreate', async (interaction) => {
+  // Modal tienda
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('modal_tienda_')) {
+    const roboKey = interaction.customId.replace('modal_tienda_', '');
+    const robo = ROBOS[roboKey];
+    const ubicacion = interaction.fields.getTextInputValue('ubicacion_tienda');
+
+    // Verificar que sigue en el canal H50
+    const member = await interaction.guild.members.fetch(interaction.user.id);
+    if (member.voice?.channelId !== CANAL_H50) {
+      await interaction.reply({ content: '❌ Ya no estás en el canal H-50.', ephemeral: true });
+      return;
+    }
+
+    await interaction.deferReply({ ephemeral: true });
+    await asignarPersonal(interaction, roboKey, robo, ubicacion);
+    return;
+  }
+
   if (!interaction.isChatInputCommand()) return;
 
   const roboKey = interaction.commandName;
@@ -127,92 +151,86 @@ client.on('interactionCreate', async (interaction) => {
     return;
   }
 
+  // Si es una tienda, abrir modal para poner el nombre del robo
+  if (TIENDAS.includes(roboKey)) {
+    const modal = new ModalBuilder()
+      .setCustomId('modal_tienda_' + roboKey)
+      .setTitle('Asignar — ' + robo.nombre);
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('ubicacion_tienda')
+          .setLabel('Nombre del robo específico')
+          .setStyle(TextInputStyle.Short)
+          .setPlaceholder('Ej: Licorería Vespucio, 24/7 del Puerto, Gasolinera Norte...')
+          .setRequired(true)
+          .setMaxLength(80)
+      )
+    );
+    await interaction.showModal(modal);
+    return;
+  }
+
   await interaction.deferReply({ ephemeral: true });
 
-  const ubicacion = interaction.options.getString('ubicacion') || robo.nombre;
+  const ubicacion = robo.nombre;
+  await asignarPersonal(interaction, roboKey, robo, ubicacion);
+});
+
+async function asignarPersonal(interaction, roboKey, robo, ubicacion) {
   const guild = interaction.guild;
   const canalDestino = await guild.channels.fetch(robo.canal);
   const minRequerido = robo.min;
 
-  // Recolectar personas disponibles de los canales de espera
-  let individuales = []; // personas de canales individuales
-  let gruposPatrulla = []; // grupos completos de canales de patrulla
+  let individuales = [];
+  let gruposPatrulla = [];
 
   for (const canalId of CANALES_INDIVIDUALES) {
     try {
       const canal = await guild.channels.fetch(canalId);
-      if (canal && canal.members) {
-        canal.members.forEach(m => individuales.push(m));
-      }
+      if (canal && canal.members) canal.members.forEach(m => individuales.push(m));
     } catch (e) {}
   }
 
   for (const canalId of CANALES_PATRULLA) {
     try {
       const canal = await guild.channels.fetch(canalId);
-      if (canal && canal.members && canal.members.size > 0) {
-        gruposPatrulla.push([...canal.members.values()]);
-      }
+      if (canal && canal.members && canal.members.size > 0) gruposPatrulla.push([...canal.members.values()]);
     } catch (e) {}
   }
 
-  // Algoritmo de asignacion
   let asignados = [];
   let restante = minRequerido;
 
-  // Primero asignar individuales
   for (const persona of individuales) {
     if (restante <= 0) break;
     asignados.push(persona);
     restante--;
   }
 
-  // Luego asignar grupos de patrulla completos si se necesitan mas
   if (restante > 0) {
     for (const grupo of gruposPatrulla) {
       if (restante <= 0) break;
-      // Solo agregar el grupo si podemos tomarlo COMPLETO
-      // o si el grupo es menor o igual a lo que necesitamos
-      if (grupo.length <= restante) {
-        asignados.push(...grupo);
-        restante -= grupo.length;
-      } else {
-        // El grupo es mas grande de lo necesario — lo mandamos igual completo
-        asignados.push(...grupo);
-        restante = 0;
-      }
+      asignados.push(...grupo);
+      restante = restante - grupo.length < 0 ? 0 : restante - grupo.length;
     }
   }
 
   const totalDisponible = individuales.length + gruposPatrulla.reduce((acc, g) => acc + g.length, 0);
 
-  if (asignados.length < minRequerido && totalDisponible < minRequerido) {
-    await interaction.editReply({
-      content: `❌ **Personal insuficiente.** Se necesitan **${minRequerido}** agentes para **${robo.nombre}** pero solo hay **${totalDisponible}** disponibles.`
-    });
+  if (asignados.length === 0 && totalDisponible < minRequerido) {
+    await interaction.editReply({ content: '❌ **Personal insuficiente.** Se necesitan **' + minRequerido + '** agentes para **' + robo.nombre + '** pero solo hay **' + totalDisponible + '** disponibles.' });
     return;
   }
 
-  // Mover a todos los asignados al canal del robo
-  const movidos = [];
-  const errores = [];
+  const movidos = [], errores = [];
   for (const persona of asignados) {
-    try {
-      await persona.voice.setChannel(robo.canal);
-      movidos.push(persona);
-    } catch (e) {
-      errores.push(persona.displayName);
-    }
+    try { await persona.voice.setChannel(robo.canal); movidos.push(persona); }
+    catch (e) { errores.push(persona.displayName); }
   }
 
-  // Setear el estado del canal con la ubicacion especifica
-  try {
-    await canalDestino.setStatus(ubicacion);
-  } catch (e) {
-    console.log('No se pudo setear el estado del canal:', e.message);
-  }
+  try { await canalDestino.setStatus(ubicacion); } catch (e) {}
 
-  // Info del robo
   const info = INFO_ROBOS[roboKey];
   const rehenes = info.rehenes > 0 ? info.rehenes + ' máx.' : 'No permitidos';
 
@@ -220,25 +238,22 @@ client.on('interactionCreate', async (interaction) => {
     .setTitle('🚨 ASIGNACIÓN — ' + robo.nombre.toUpperCase())
     .setDescription('**' + ubicacion + '**')
     .addFields(
-      { name: '👮 Agentes asignados',   value: movidos.map(m => '<@' + m.id + '>').join('\n') || 'Ninguno', inline: false },
-      { name: '📊 Total asignados',     value: movidos.length + '/' + minRequerido + ' mínimo', inline: true },
-      { name: '🎯 Canal destino',       value: '<#' + robo.canal + '>', inline: true },
-      { name: '\u200B',                 value: '\u200B', inline: false },
-      { name: '🔫 Armamento',          value: info.armamento, inline: false },
-      { name: '💨 Humos',              value: String(info.humos),    inline: true },
-      { name: '🥫 Latas',              value: String(info.latas),    inline: true },
-      { name: '🔥 Molotovs',           value: String(info.molotovs), inline: true },
-      { name: '🧑 Rehenes',            value: rehenes, inline: true },
+      { name: '👮 Agentes asignados',  value: movidos.map(m => '<@' + m.id + '>').join('\n') || 'Ninguno', inline: false },
+      { name: '📊 Total asignados',    value: movidos.length + '/' + minRequerido + ' mínimo', inline: true },
+      { name: '🎯 Canal destino',      value: '<#' + robo.canal + '>', inline: true },
+      { name: '\u200B',              value: '\u200B', inline: false },
+      { name: '🔫 Armamento',         value: info.armamento, inline: false },
+      { name: '💨 Humos',             value: String(info.humos),    inline: true },
+      { name: '🥫 Latas',             value: String(info.latas),    inline: true },
+      { name: '🔥 Molotovs',          value: String(info.molotovs), inline: true },
+      { name: '🧑 Rehenes',           value: rehenes, inline: true },
     )
-    .setColor(0xCC2222)
-    .setTimestamp()
+    .setColor(0xCC2222).setTimestamp()
     .setFooter({ text: 'H50 Bot  •  Sistema de Asignación' });
 
-  if (errores.length > 0) {
-    embed.addFields({ name: '⚠️ No se pudieron mover', value: errores.join(', '), inline: false });
-  }
+  if (errores.length > 0) embed.addFields({ name: '⚠️ No se pudieron mover', value: errores.join(', '), inline: false });
 
   await interaction.editReply({ embeds: [embed] });
-});
+}
 
 client.login(process.env.TOKEN);
