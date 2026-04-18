@@ -100,25 +100,22 @@ async function asignarPersonal(interaction, roboKey, robo, ubicacion) {
   let individuales = [];
   let gruposPatrulla = [];
 
+  // Usar voiceStates.cache para obtener quien esta en cada canal de voz
+  // Primero actualizar la cache de miembros
+  await guild.members.fetch();
+
   for (const canalId of CANALES_INDIVIDUALES) {
-    try {
-      const canal = await guild.channels.fetch(canalId);
-      if (canal && canal.members) {
-        canal.members.forEach(m => {
-          if (m.voice?.channelId) individuales.push(m);
-        });
-      }
-    } catch (e) {}
+    const enCanal = guild.voiceStates.cache
+      .filter(vs => vs.channelId === canalId && vs.member && !vs.member.user.bot)
+      .map(vs => vs.member);
+    enCanal.forEach(m => individuales.push(m));
   }
 
   for (const canalId of CANALES_PATRULLA) {
-    try {
-      const canal = await guild.channels.fetch(canalId);
-      if (canal && canal.members && canal.members.size > 0) {
-        const grupo = [...canal.members.values()].filter(m => m.voice?.channelId);
-        if (grupo.length > 0) gruposPatrulla.push(grupo);
-      }
-    } catch (e) {}
+    const grupo = guild.voiceStates.cache
+      .filter(vs => vs.channelId === canalId && vs.member && !vs.member.user.bot)
+      .map(vs => vs.member);
+    if (grupo.length > 0) gruposPatrulla.push(grupo);
   }
 
   let asignados = [];
