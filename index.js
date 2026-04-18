@@ -15,6 +15,8 @@ const client = new Client({
 const GUILD_ID  = '1000882508373688331';
 const CANAL_H50 = '1362506087818854540';
 const TIENDAS   = ['tienda1', 'tienda2', 'tienda3'];
+const CANAL_SECUESTRO    = '1363375107078361098';
+const CANAL_ESPERANDO    = '1355660648910032976';
 
 // Registro de origen: { canalRobo: { userId: canalOrigen } }
 const origenPersonal = {};
@@ -228,6 +230,20 @@ client.once('ready', async () => {
 
   commands.push(
     new SlashCommandBuilder()
+      .setName('secuestro_total')
+      .setDescription('Manda TODO el personal disponible al canal de Secuestro (menos H-50)')
+      .toJSON()
+  );
+
+  commands.push(
+    new SlashCommandBuilder()
+      .setName('patrullar')
+      .setDescription('Divide el personal de Esperando Asignación en los canales de patrulla (mín. 2 por canal)')
+      .toJSON()
+  );
+
+  commands.push(
+    new SlashCommandBuilder()
       .setName('cancelar')
       .setDescription('Devuelve a cada persona al canal donde estaba antes')
       .addStringOption(o => o
@@ -249,6 +265,115 @@ client.once('ready', async () => {
 // ==================== INTERACTIONS ====================
 client.on('interactionCreate', async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
+
+  // /secuestro_total
+  if (interaction.commandName === 'secuestro_total') {
+    const member = await interaction.guild.members.fetch(interaction.user.id);
+    if (member.voice?.channelId !== CANAL_H50) {
+      await interaction.reply({ content: '❌ Solo podés usar este comando desde el canal de voz **H-50**.', ephemeral: true });
+      return;
+    }
+    await interaction.deferReply({ ephemeral: true });
+
+    // Recolectar TODOS los que están en voz menos los del H-50 y el canal de secuestro
+    const todosEnVoz = interaction.guild.voiceStates.cache
+      .filter(vs => vs.channelId !== CANAL_H50 && vs.channelId !== CANAL_SECUESTRO && vs.member && !vs.member.user.bot)
+      .map(vs => vs.member);
+
+    if (todosEnVoz.length === 0) {
+      await interaction.editReply({ content: '❌ No hay personal disponible para mover al Secuestro.' });
+      return;
+    }
+
+    const movidos = [], errores = [];
+    for (const persona of todosEnVoz) {
+      try {
+        await persona.voice.setChannel(CANAL_SECUESTRO);
+        movidos.push(persona);
+      } catch (e) { errores.push(persona.displayName); }
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle('🚨 SECUESTRO — TODO EL PERSONAL')
+      .setDescription('Se movió a **todo** el personal disponible al canal de Secuestro.')
+      .addFields(
+        { name: '👮 Personal movilizado', value: movidos.map(m => '<@' + m.id + '>').join('\n') || 'Ninguno', inline: false },
+        { name: '📊 Total', value: movidos.length + ' agentes', inline: true }
+      )
+      .setColor(0xCC0000).setTimestamp()
+      .setFooter({ text: 'H50 Bot  •  Sistema de Asignación' });
+
+    if (errores.length > 0) embed.addFields({ name: '⚠️ No se pudieron mover', value: errores.join(', '), inline: false });
+    await interaction.editReply({ embeds: [embed] });
+    return;
+  }
+
+  // /patrullar
+  if (interaction.commandName === 'patrullar') {
+    const member = await interaction.guild.members.fetch(interaction.user.id);
+    if (member.voice?.channelId !== CANAL_H50) {
+      await interaction.reply({ content: '❌ Solo podés usar este comando desde el canal de voz **H-50**.', ephemeral: true });
+      return;
+    }
+    await interaction.deferReply({ ephemeral: true });
+
+    // Tomar solo los que están en Esperando Asignación
+    const enEspera = interaction.guild.voiceStates.cache
+      .filter(vs => vs.channelId === CANAL_ESPERANDO && vs.member && !vs.member.user.bot)
+      .map(vs => vs.member);
+
+    if (enEspera.length < 2) {
+      await interaction.editReply({ content: '❌ Se necesitan al menos **2** personas en Esperando Asignación para patrullar.' });
+      return;
+    }
+
+    // Mezclar aleatoriamente
+    const shuffled = enEspera.sort(() => Math.random() - 0.5);
+
+    // Calcular cuántos canales usar (mínimo 2 por canal)
+    const maxCanales = Math.floor(shuffled.length / 2);
+    const canalesAUsar = CANALES_PATRULLA.slice(0, Math.min(maxCanales, CANALES_PATRULLA.length));
+    const cantCanales = canalesAUsar.length;
+
+    // Dividir equitativamente — los extras van a los primeros canales
+    const base = Math.floor(shuffled.length / cantCanales);
+    const extras = shuffled.length % cantCanales;
+
+    const grupos = [];
+    let idx = 0;
+    for (let i = 0; i < cantCanales; i++) {
+      const cantidad = base + (i < extras ? 1 : 0);
+      grupos.push(shuffled.slice(idx, idx + cantidad));
+      idx += cantidad;
+    }
+
+    const movidos = [], errores = [];
+    for (let i = 0; i < grupos.length; i++) {
+      for (const persona of grupos[i]) {
+        try {
+          await persona.voice.setChannel(canalesAUsar[i]);
+          movidos.push({ persona, canal: canalesAUsar[i] });
+        } catch (e) { errores.push(persona.displayName); }
+      }
+    }
+
+    const descripcion = grupos.map((g, i) =>
+      '**Canal ' + (i+1) + '** (' + g.length + ' agentes): ' + g.map(m => '<@' + m.id + '>').join(', ')
+    ).join('\n');
+
+    const embed = new EmbedBuilder()
+      .setTitle('🚔 PATRULLA ASIGNADA')
+      .setDescription(descripcion)
+      .addFields(
+        { name: '📊 Total asignados', value: movidos.length + ' agentes en ' + cantCanales + ' grupos', inline: true }
+      )
+      .setColor(0x2266CC).setTimestamp()
+      .setFooter({ text: 'H50 Bot  •  Sistema de Asignación' });
+
+    if (errores.length > 0) embed.addFields({ name: '⚠️ No se pudieron mover', value: errores.join(', '), inline: false });
+    await interaction.editReply({ embeds: [embed] });
+    return;
+  }
 
   // /liberar
   if (interaction.commandName === 'liberar') {
