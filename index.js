@@ -18,8 +18,15 @@ const TIENDAS   = ['tienda1', 'tienda2', 'tienda3'];
 const CANAL_SECUESTRO    = '1363375107078361098';
 const CANAL_ESPERANDO    = '1355660648910032976';
 const CANAL_EXAMEN       = '1347421594137530459';
-const CANAL_INSTRUCTORES = '1347421603935424525';
+const CANAL_INSTRUCTORES   = '1347421603935424525';
+const CANAL_RESULTADOS    = '1347421583781920849';
+const ROL_HEAD_PFA        = '1347421445869011046';
+const ROL_ENCARGADO_INSTR = '1460777709147000944';
 const ROL_INSTRUCTORES   = '1347421483164766329';
+
+// Registro semanal de examenes: { userId: { aprobados: 0, desaprobados: 0 } }
+let semanaInicio = new Date();
+let registroSemanal = {};
 
 // Mapa de postulantes esperando examen: { userId: { entro: timestamp, avisos: 0, intervalo: intervalId } }
 const esperandoExamen = {};
@@ -334,6 +341,20 @@ client.once('ready', async () => {
 
   commands.push(
     new SlashCommandBuilder()
+      .setName('instructores')
+      .setDescription('[SOLO HEAD] Ver estadísticas de exámenes de la semana actual')
+      .toJSON()
+  );
+
+  commands.push(
+    new SlashCommandBuilder()
+      .setName('cerrar-instructores')
+      .setDescription('[SOLO HEAD] Cierra la semana y resetea el contador de exámenes')
+      .toJSON()
+  );
+
+  commands.push(
+    new SlashCommandBuilder()
       .setName('patrullar')
       .setDescription('Divide el personal de Esperando Asignación en los canales de patrulla (mín. 2 por canal)')
       .toJSON()
@@ -362,6 +383,73 @@ client.once('ready', async () => {
 // ==================== INTERACTIONS ====================
 client.on('interactionCreate', async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
+
+  // /instructores
+  if (interaction.commandName === 'instructores') {
+    const puedeUsar = interaction.member.roles.cache.has(ROL_HEAD_PFA) || interaction.member.roles.cache.has(ROL_ENCARGADO_INSTR);
+    if (!puedeUsar) { await interaction.reply({ content: '❌ No tenés permisos.', ephemeral: true }); return; }
+    await interaction.deferReply({ ephemeral: true });
+    const canal = await interaction.guild.channels.fetch(CANAL_RESULTADOS);
+    const mensajes = await canal.messages.fetch({ limit: 100 });
+    const conteo = {};
+    mensajes.forEach(msg => {
+      if (msg.author.bot || msg.createdAt < semanaInicio) return;
+      const texto = msg.content.toLowerCase();
+      const uid = msg.author.id;
+      if (!conteo[uid]) conteo[uid] = { aprobados: 0, desaprobados: 0 };
+      if (texto.includes('aprobaste el examen oral')) conteo[uid].aprobados++;
+      else if (texto.includes('desaprobaste el examen oral')) conteo[uid].desaprobados++;
+    });
+    const inicio = semanaInicio.toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', year: 'numeric' });
+    const hoy = new Date().toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', year: 'numeric' });
+    const filas = Object.keys(conteo).length > 0
+      ? Object.entries(conteo).map(([uid, d]) => '<@' + uid + '> — ✅ ' + d.aprobados + ' aprobados  |  ❌ ' + d.desaprobados + ' desaprobados  |  📊 ' + (d.aprobados + d.desaprobados) + ' total').join('\n')
+      : 'Sin exámenes registrados esta semana.';
+    const embed = new EmbedBuilder()
+      .setTitle('📋 ESTADÍSTICAS DE INSTRUCTORES')
+      .setDescription(filas)
+      .addFields({ name: '📅 Período', value: inicio + ' → ' + hoy, inline: true })
+      .setColor(0xFFD700).setTimestamp()
+      .setFooter({ text: 'H50 Bot  •  Sistema de Instructores' });
+    await interaction.editReply({ embeds: [embed] });
+    return;
+  }
+
+  // /cerrar-instructores
+  if (interaction.commandName === 'cerrar-instructores') {
+    const puedeUsar = interaction.member.roles.cache.has(ROL_HEAD_PFA) || interaction.member.roles.cache.has(ROL_ENCARGADO_INSTR);
+    if (!puedeUsar) { await interaction.reply({ content: '❌ No tenés permisos.', ephemeral: true }); return; }
+    await interaction.deferReply({ ephemeral: true });
+    const canal = await interaction.guild.channels.fetch(CANAL_RESULTADOS);
+    const mensajes = await canal.messages.fetch({ limit: 100 });
+    const conteo = {};
+    mensajes.forEach(msg => {
+      if (msg.author.bot || msg.createdAt < semanaInicio) return;
+      const texto = msg.content.toLowerCase();
+      const uid = msg.author.id;
+      if (!conteo[uid]) conteo[uid] = { aprobados: 0, desaprobados: 0 };
+      if (texto.includes('aprobaste el examen oral')) conteo[uid].aprobados++;
+      else if (texto.includes('desaprobaste el examen oral')) conteo[uid].desaprobados++;
+    });
+    const inicio = semanaInicio.toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', year: 'numeric' });
+    const hoy = new Date().toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', year: 'numeric' });
+    const filas = Object.keys(conteo).length > 0
+      ? Object.entries(conteo).map(([uid, d]) => '<@' + uid + '> — ✅ ' + d.aprobados + '  |  ❌ ' + d.desaprobados + '  |  📊 ' + (d.aprobados + d.desaprobados) + ' total').join('\n')
+      : 'Sin exámenes registrados esta semana.';
+    const embed = new EmbedBuilder()
+      .setTitle('🔒 SEMANA CERRADA — RESUMEN FINAL')
+      .setDescription(filas)
+      .addFields(
+        { name: '📅 Período cerrado', value: inicio + ' → ' + hoy, inline: true },
+        { name: '👮 Cerrado por', value: '<@' + interaction.user.id + '>', inline: true }
+      )
+      .setColor(0xCC2222).setTimestamp()
+      .setFooter({ text: 'H50 Bot  •  Sistema de Instructores' });
+    semanaInicio = new Date();
+    registroSemanal = {};
+    await interaction.editReply({ embeds: [embed] });
+    return;
+  }
 
   // /secuestro_total
   if (interaction.commandName === 'secuestro') {
@@ -577,6 +665,23 @@ client.on('interactionCreate', async (interaction) => {
 
   await interaction.deferReply({ ephemeral: true });
   await asignarPersonal(interaction, roboKey, robo, cantidad, ubicacion);
+});
+
+// ==================== CONTADOR DE EXAMENES ====================
+client.on('messageCreate', async (message) => {
+  if (message.channelId !== CANAL_RESULTADOS) return;
+  if (message.author.bot) return;
+
+  const texto = message.content.toLowerCase();
+  const userId = message.author.id;
+
+  if (!registroSemanal[userId]) registroSemanal[userId] = { aprobados: 0, desaprobados: 0 };
+
+  if (texto.includes('aprobaste el examen oral')) {
+    registroSemanal[userId].aprobados++;
+  } else if (texto.includes('desaprobaste el examen oral')) {
+    registroSemanal[userId].desaprobados++;
+  }
 });
 
 client.login(process.env.TOKEN);
