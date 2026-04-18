@@ -309,7 +309,7 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
 // ==================== SISTEMA DE TICKETS ====================
 client.on('messageCreate', async (message) => {
   // Detectar tickets en los canales correspondientes
-  if (CANALES_TICKETS[message.channelId] && !message.author.bot) {
+  if (CANALES_TICKETS[message.channelId] && message.author.id !== client.user.id) {
     const categoriaTicket = CANALES_TICKETS[message.channelId];
     const puedeAsumir = (roles) => roles.cache.has(ROL_HIGH) || roles.cache.has(ROL_HEAD_PFA);
 
