@@ -17,6 +17,7 @@ const CANAL_H50 = '1362506087818854540';
 const TIENDAS   = ['tienda1', 'tienda2', 'tienda3'];
 const CANAL_SECUESTRO    = '1363375107078361098';
 const CANAL_ESPERANDO    = '1355660648910032976';
+const CANAL_LOGS         = '1495016854807121980';
 
 // Registro de origen: { canalRobo: { userId: canalOrigen } }
 const origenPersonal = {};
@@ -62,7 +63,7 @@ const ROBOS = {
   fabrica:        { canal: '1365400767678119996', nombre: 'Fábrica',              min: 7  },
   rancho:         { canal: '1363190192516759812', nombre: 'Rancho Abandonado',    min: 4  },
   fundidora:      { canal: '1403610575518302328', nombre: 'Fundidora',            min: 4  },
-  secuestro:      { canal: '1363375107078361098', nombre: 'Secuestro',            min: 3  },
+
 };
 
 const INFO_ROBOS = {
@@ -92,8 +93,16 @@ const INFO_ROBOS = {
   fabrica:        { armamento: 'Pistolas, Escopetas, Subfusiles, Fusiles',         humos: 8, latas: 6, molotovs: 6, rehenes: 2 },
   rancho:         { armamento: 'Pistolas, Escopetas, Subfusiles, Fusiles',         humos: 3, latas: 4, molotovs: 2, rehenes: 2 },
   fundidora:      { armamento: 'Pistolas, Escopetas, Subfusiles, Fusiles',         humos: 3, latas: 4, molotovs: 2, rehenes: 2 },
-  secuestro:      { armamento: 'Pistolas, Escopetas, Subfusiles',                  humos: 2, latas: 3, molotovs: 1, rehenes: 0 },
+
 };
+
+// ==================== LOGS ====================
+async function enviarLog(guild, embed) {
+  try {
+    const canal = await guild.channels.fetch(CANAL_LOGS);
+    await canal.send({ embeds: [embed] });
+  } catch (e) { console.error('Error enviando log:', e.message); }
+}
 
 // ==================== FUNCION DE ASIGNACION ====================
 async function asignarPersonal(interaction, roboKey, robo, cantidad, ubicacion) {
@@ -175,13 +184,17 @@ async function asignarPersonal(interaction, roboKey, robo, cantidad, ubicacion) 
       { name: '🥫 Latas',            value: String(info.latas),    inline: true },
       { name: '🔥 Molotovs',         value: String(info.molotovs), inline: true },
       { name: '🧑 Rehenes',          value: rehenes,               inline: true },
+      { name: '👮 Ejecutado por',       value: '<@' + interaction.user.id + '>', inline: true },
     )
     .setColor(0xCC2222).setTimestamp()
     .setFooter({ text: 'H50 Bot  •  Sistema de Asignación' });
 
   if (errores.length > 0) embed.addFields({ name: '⚠️ No se pudieron mover', value: errores.join(', '), inline: false });
 
-  await interaction.editReply({ embeds: [embed] });
+  // Enviar al canal de logs
+  await enviarLog(guild, embed);
+  // Confirmar al usuario con mensaje minimo efimero
+  await interaction.editReply({ content: '✅ Asignación realizada. Ver <#' + CANAL_LOGS + '> para el detalle.' });
 }
 
 // ==================== READY ====================
@@ -214,6 +227,7 @@ client.once('ready', async () => {
 
   // /liberar y /cancelar con opcion de robo
   const robosChoices = Object.entries(ROBOS).map(([key, robo]) => ({ name: robo.nombre, value: key }));
+  robosChoices.push({ name: 'Secuestro', value: 'secuestro_canal' });
 
   commands.push(
     new SlashCommandBuilder()
@@ -230,8 +244,8 @@ client.once('ready', async () => {
 
   commands.push(
     new SlashCommandBuilder()
-      .setName('secuestro_total')
-      .setDescription('Manda TODO el personal disponible al canal de Secuestro (menos H-50)')
+      .setName('secuestro')
+      .setDescription('🚨 ALERTA ROJA — Manda TODO el personal al canal de Secuestro')
       .toJSON()
   );
 
@@ -267,7 +281,7 @@ client.on('interactionCreate', async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
   // /secuestro_total
-  if (interaction.commandName === 'secuestro_total') {
+  if (interaction.commandName === 'secuestro') {
     const member = await interaction.guild.members.fetch(interaction.user.id);
     if (member.voice?.channelId !== CANAL_H50) {
       await interaction.reply({ content: '❌ Solo podés usar este comando desde el canal de voz **H-50**.', ephemeral: true });
@@ -298,13 +312,15 @@ client.on('interactionCreate', async (interaction) => {
       .setDescription('Se movió a **todo** el personal disponible al canal de Secuestro.')
       .addFields(
         { name: '👮 Personal movilizado', value: movidos.map(m => '<@' + m.id + '>').join('\n') || 'Ninguno', inline: false },
-        { name: '📊 Total', value: movidos.length + ' agentes', inline: true }
+        { name: '📊 Total', value: movidos.length + ' agentes', inline: true },
+        { name: '👮 Ejecutado por', value: '<@' + interaction.user.id + '>', inline: true }
       )
       .setColor(0xCC0000).setTimestamp()
       .setFooter({ text: 'H50 Bot  •  Sistema de Asignación' });
 
     if (errores.length > 0) embed.addFields({ name: '⚠️ No se pudieron mover', value: errores.join(', '), inline: false });
-    await interaction.editReply({ embeds: [embed] });
+    await enviarLog(interaction.guild, embed);
+    await interaction.editReply({ content: '🚨 Secuestro activado. Ver <#' + CANAL_LOGS + '> para el detalle.' });
     return;
   }
 
@@ -365,13 +381,15 @@ client.on('interactionCreate', async (interaction) => {
       .setTitle('🚔 PATRULLA ASIGNADA')
       .setDescription(descripcion)
       .addFields(
-        { name: '📊 Total asignados', value: movidos.length + ' agentes en ' + cantCanales + ' grupos', inline: true }
+        { name: '📊 Total asignados', value: movidos.length + ' agentes en ' + cantCanales + ' grupos', inline: true },
+        { name: '👮 Ejecutado por', value: '<@' + interaction.user.id + '>', inline: true }
       )
       .setColor(0x2266CC).setTimestamp()
       .setFooter({ text: 'H50 Bot  •  Sistema de Asignación' });
 
     if (errores.length > 0) embed.addFields({ name: '⚠️ No se pudieron mover', value: errores.join(', '), inline: false });
-    await interaction.editReply({ embeds: [embed] });
+    await enviarLog(interaction.guild, embed);
+    await interaction.editReply({ content: '✅ Patrulla asignada. Ver <#' + CANAL_LOGS + '> para el detalle.' });
     return;
   }
 
@@ -385,30 +403,36 @@ client.on('interactionCreate', async (interaction) => {
       return;
     }
     await interaction.deferReply({ ephemeral: true });
+
+    // Canal a liberar — puede ser un robo normal o el canal de secuestro
+    const canalALiberar = roboKey === 'secuestro_canal' ? CANAL_SECUESTRO : robo?.canal;
+    const nombreALiberar = roboKey === 'secuestro_canal' ? 'Secuestro' : robo?.nombre;
+
     const enCanal = interaction.guild.voiceStates.cache
-      .filter(vs => vs.channelId === robo.canal && vs.member && !vs.member.user.bot)
+      .filter(vs => vs.channelId === canalALiberar && vs.member && !vs.member.user.bot)
       .map(vs => vs.member);
     if (enCanal.length === 0) {
-      await interaction.editReply({ content: '❌ No hay nadie en el canal de **' + robo.nombre + '**.' });
+      await interaction.editReply({ content: '❌ No hay nadie en el canal de **' + nombreALiberar + '**.' });
       return;
     }
     const movidos = [], errores = [];
     for (const persona of enCanal) {
       try {
-        await persona.voice.setChannel(CANALES_INDIVIDUALES[0]); // Esperando Asignacion
+        await persona.voice.setChannel(CANALES_INDIVIDUALES[0]);
         movidos.push(persona);
       } catch (e) { errores.push(persona.displayName); }
     }
-    // Limpiar registro de origen
-    delete origenPersonal[robo.canal];
+    delete origenPersonal[canalALiberar];
     const embed = new EmbedBuilder()
-      .setTitle('✅ LIBERADOS — ' + robo.nombre.toUpperCase())
+      .setTitle('✅ LIBERADOS — ' + nombreALiberar.toUpperCase())
       .setDescription('El siguiente personal fue devuelto a **Esperando Asignación**:')
       .addFields({ name: '👮 Personal liberado', value: movidos.map(m => '<@' + m.id + '>').join('\n') || 'Ninguno', inline: false })
+      .addFields({ name: '👮 Ejecutado por', value: '<@' + interaction.user.id + '>', inline: true })
       .setColor(0x00CC66).setTimestamp()
       .setFooter({ text: 'H50 Bot  •  Sistema de Asignación' });
     if (errores.length > 0) embed.addFields({ name: '⚠️ No se pudieron mover', value: errores.join(', '), inline: false });
-    await interaction.editReply({ embeds: [embed] });
+    await enviarLog(interaction.guild, embed);
+    await interaction.editReply({ content: '✅ Personal liberado. Ver <#' + CANAL_LOGS + '> para el detalle.' });
     return;
   }
 
@@ -443,10 +467,12 @@ client.on('interactionCreate', async (interaction) => {
       .setTitle('↩️ CANCELADO — ' + robo.nombre.toUpperCase())
       .setDescription('El robo fue cancelado. Personal devuelto a su canal de origen:')
       .addFields({ name: '👮 Personal devuelto', value: movidos.map(({ persona, canalOrigen }) => '<@' + persona.id + '> → <#' + canalOrigen + '>').join('\n') || 'Ninguno', inline: false })
+      .addFields({ name: '👮 Ejecutado por', value: '<@' + interaction.user.id + '>', inline: true })
       .setColor(0xFFAA00).setTimestamp()
       .setFooter({ text: 'H50 Bot  •  Sistema de Asignación' });
     if (errores.length > 0) embed.addFields({ name: '⚠️ No se pudieron mover', value: errores.join(', '), inline: false });
-    await interaction.editReply({ embeds: [embed] });
+    await enviarLog(interaction.guild, embed);
+    await interaction.editReply({ content: '↩️ Personal devuelto. Ver <#' + CANAL_LOGS + '> para el detalle.' });
     return;
   }
 
