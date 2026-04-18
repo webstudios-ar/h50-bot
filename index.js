@@ -1,8 +1,7 @@
 require('dotenv').config();
 const {
   Client, GatewayIntentBits, REST, Routes,
-  SlashCommandBuilder, ModalBuilder, TextInputBuilder,
-  TextInputStyle, ActionRowBuilder, EmbedBuilder
+  SlashCommandBuilder, ActionRowBuilder, EmbedBuilder
 } = require('discord.js');
 
 const client = new Client({
@@ -32,33 +31,33 @@ const CANALES_PATRULLA = [
 ];
 
 const ROBOS = {
-  tienda1:        { canal: '1362914142851436774', nombre: 'Tienda 1',             min: 1 },
-  tienda2:        { canal: '1453978522875068426', nombre: 'Tienda 2',             min: 1 },
-  tienda3:        { canal: '1362913398827913416', nombre: 'Tienda 3',             min: 1 },
-  facebook:       { canal: '1362287835587154071', nombre: 'Facebook',             min: 4 },
-  bancocentral:   { canal: '1362513426651283709', nombre: 'Banco Central',        min: 7 },
-  humane:         { canal: '1365399784508227584', nombre: 'Humane',               min: 7 },
-  fleecacosta:    { canal: '1374468389493280828', nombre: 'Fleeca Costa',         min: 3 },
-  fleecalife:     { canal: '1365400107440275526', nombre: 'Fleeca Life',          min: 3 },
-  fleecataller:   { canal: '1362513464672649437', nombre: 'Fleeca Taller',        min: 3 },
-  fleecapaleto:   { canal: '1378143656761884754', nombre: 'Fleeca Paleto',        min: 3 },
-  fleecaayunta:   { canal: '1362513448189169735', nombre: 'Fleeca Ayuntamiento',  min: 3 },
-  fleecasandy:    { canal: '1398041090694582333', nombre: 'Fleeca Sandy Shores',  min: 3 },
-  mazebank:       { canal: '1362513386314662173', nombre: 'Maze Bank',            min: 2 },
-  mansion:        { canal: '1362916819014258718', nombre: 'Mansión',              min: 3 },
-  museo:          { canal: '1365400052058820853', nombre: 'Museo',                min: 5 },
-  joyeria:        { canal: '1362916726840365296', nombre: 'Joyería',              min: 2 },
-  subteprincipal: { canal: '1452721020984103044', nombre: 'Subte Principal',      min: 3 },
-  subtebahamas:   { canal: '1452721517782896640', nombre: 'Subte Bahamas',        min: 3 },
-  subtegaraje:    { canal: '1452721435117093065', nombre: 'Subte Garaje',         min: 3 },
-  subteaero:      { canal: '1452721685043220583', nombre: 'Subte Aeropuerto',     min: 3 },
-  carniceria:     { canal: '1362513481206730893', nombre: 'Carnicería',           min: 7 },
-  estadio:        { canal: '1362916764370866247', nombre: 'Estadio',              min: 3 },
-  yate:           { canal: '1362915313594794104', nombre: 'Yate',                 min: 4 },
-  fabrica:        { canal: '1365400767678119996', nombre: 'Fábrica',              min: 7 },
-  rancho:         { canal: '1363190192516759812', nombre: 'Rancho Abandonado',    min: 4 },
-  fundidora:      { canal: '1403610575518302328', nombre: 'Fundidora',            min: 4 },
-  secuestro:      { canal: '1363375107078361098', nombre: 'Secuestro',            min: 3 },
+  tienda1:        { canal: '1362914142851436774', nombre: 'Tienda 1',             min: 1  },
+  tienda2:        { canal: '1453978522875068426', nombre: 'Tienda 2',             min: 1  },
+  tienda3:        { canal: '1362913398827913416', nombre: 'Tienda 3',             min: 1  },
+  facebook:       { canal: '1362287835587154071', nombre: 'Facebook',             min: 4  },
+  bancocentral:   { canal: '1362513426651283709', nombre: 'Banco Central',        min: 7  },
+  humane:         { canal: '1365399784508227584', nombre: 'Humane',               min: 7  },
+  fleecacosta:    { canal: '1374468389493280828', nombre: 'Fleeca Costa',         min: 3  },
+  fleecalife:     { canal: '1365400107440275526', nombre: 'Fleeca Life',          min: 3  },
+  fleecataller:   { canal: '1362513464672649437', nombre: 'Fleeca Taller',        min: 3  },
+  fleecapaleto:   { canal: '1378143656761884754', nombre: 'Fleeca Paleto',        min: 3  },
+  fleecaayunta:   { canal: '1362513448189169735', nombre: 'Fleeca Ayuntamiento',  min: 3  },
+  fleecasandy:    { canal: '1398041090694582333', nombre: 'Fleeca Sandy Shores',  min: 3  },
+  mazebank:       { canal: '1362513386314662173', nombre: 'Maze Bank',            min: 2  },
+  mansion:        { canal: '1362916819014258718', nombre: 'Mansión',              min: 3  },
+  museo:          { canal: '1365400052058820853', nombre: 'Museo',                min: 5  },
+  joyeria:        { canal: '1362916726840365296', nombre: 'Joyería',              min: 2  },
+  subteprincipal: { canal: '1452721020984103044', nombre: 'Subte Principal',      min: 3  },
+  subtebahamas:   { canal: '1452721517782896640', nombre: 'Subte Bahamas',        min: 3  },
+  subtegaraje:    { canal: '1452721435117093065', nombre: 'Subte Garaje',         min: 3  },
+  subteaero:      { canal: '1452721685043220583', nombre: 'Subte Aeropuerto',     min: 3  },
+  carniceria:     { canal: '1362513481206730893', nombre: 'Carnicería',           min: 7  },
+  estadio:        { canal: '1362916764370866247', nombre: 'Estadio',              min: 3  },
+  yate:           { canal: '1362915313594794104', nombre: 'Yate',                 min: 4  },
+  fabrica:        { canal: '1365400767678119996', nombre: 'Fábrica',              min: 7  },
+  rancho:         { canal: '1363190192516759812', nombre: 'Rancho Abandonado',    min: 4  },
+  fundidora:      { canal: '1403610575518302328', nombre: 'Fundidora',            min: 4  },
+  secuestro:      { canal: '1363375107078361098', nombre: 'Secuestro',            min: 3  },
 };
 
 const INFO_ROBOS = {
@@ -92,16 +91,13 @@ const INFO_ROBOS = {
 };
 
 // ==================== FUNCION DE ASIGNACION ====================
-async function asignarPersonal(interaction, roboKey, robo, ubicacion) {
+async function asignarPersonal(interaction, roboKey, robo, cantidad, ubicacion) {
   const guild = interaction.guild;
   const canalDestino = await guild.channels.fetch(robo.canal);
-  const minRequerido = robo.min;
 
   let individuales = [];
   let gruposPatrulla = [];
 
-  // Usar voiceStates.cache para obtener quien esta en cada canal de voz
-  // Primero actualizar la cache de miembros
   await guild.members.fetch();
 
   for (const canalId of CANALES_INDIVIDUALES) {
@@ -118,8 +114,15 @@ async function asignarPersonal(interaction, roboKey, robo, ubicacion) {
     if (grupo.length > 0) gruposPatrulla.push(grupo);
   }
 
+  const totalDisponible = individuales.length + gruposPatrulla.reduce((acc, g) => acc + g.length, 0);
+
+  if (totalDisponible === 0) {
+    await interaction.editReply({ content: '❌ No hay personal disponible en los canales de espera.' });
+    return;
+  }
+
   let asignados = [];
-  let restante = minRequerido;
+  let restante = cantidad;
 
   for (const persona of individuales) {
     if (restante <= 0) break;
@@ -135,21 +138,9 @@ async function asignarPersonal(interaction, roboKey, robo, ubicacion) {
     }
   }
 
-  const totalDisponible = individuales.length + gruposPatrulla.reduce((acc, g) => acc + g.length, 0);
-
-  if (asignados.length === 0) {
-    await interaction.editReply({ content: '❌ **Personal insuficiente.** Se necesitan **' + minRequerido + '** agentes para **' + robo.nombre + '** pero solo hay **' + totalDisponible + '** disponibles.' });
-    return;
-  }
-
   const movidos = [], errores = [];
   for (const persona of asignados) {
     try {
-      // Solo se puede mover si esta en un canal de voz
-      if (!persona.voice?.channelId) {
-        errores.push(persona.displayName + ' (sin voz)');
-        continue;
-      }
       await persona.voice.setChannel(robo.canal);
       movidos.push(persona);
     } catch (e) { errores.push(persona.displayName); }
@@ -165,7 +156,7 @@ async function asignarPersonal(interaction, roboKey, robo, ubicacion) {
     .setDescription('📍 **' + ubicacion + '**')
     .addFields(
       { name: '👮 Agentes asignados', value: movidos.map(m => '<@' + m.id + '>').join('\n') || 'Ninguno', inline: false },
-      { name: '📊 Asignados',        value: movidos.length + ' / ' + minRequerido + ' mín.', inline: true },
+      { name: '📊 Asignados',        value: movidos.length + ' / ' + cantidad + ' pedidos', inline: true },
       { name: '🎯 Canal',            value: '<#' + robo.canal + '>', inline: true },
       { name: '\u200B',              value: '\u200B', inline: false },
       { name: '🔫 Armamento',        value: info.armamento, inline: false },
@@ -186,12 +177,29 @@ async function asignarPersonal(interaction, roboKey, robo, ubicacion) {
 client.once('ready', async () => {
   console.log('H50 Bot conectado: ' + client.user.tag);
 
-  const commands = Object.entries(ROBOS).map(([key, robo]) =>
-    new SlashCommandBuilder()
+  const commands = Object.entries(ROBOS).map(([key, robo]) => {
+    const cmd = new SlashCommandBuilder()
       .setName(key)
       .setDescription('Asignar personal: ' + robo.nombre)
-      .toJSON()
-  );
+      .addIntegerOption(o => o
+        .setName('cantidad')
+        .setDescription('Cantidad de agentes a asignar')
+        .setRequired(true)
+        .setMinValue(1)
+        .setMaxValue(20)
+      );
+
+    // Solo tiendas tienen opcion de ubicacion
+    if (TIENDAS.includes(key)) {
+      cmd.addStringOption(o => o
+        .setName('ubicacion')
+        .setDescription('Nombre del lugar (ej: Licorería Vespucio)')
+        .setRequired(true)
+      );
+    }
+
+    return cmd.toJSON();
+  });
 
   const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
   try {
@@ -202,22 +210,6 @@ client.once('ready', async () => {
 
 // ==================== INTERACTIONS ====================
 client.on('interactionCreate', async (interaction) => {
-
-  // Modal tienda submit
-  if (interaction.isModalSubmit() && interaction.customId.startsWith('modal_tienda_')) {
-    const roboKey = interaction.customId.replace('modal_tienda_', '');
-    const robo = ROBOS[roboKey];
-    const ubicacion = interaction.fields.getTextInputValue('ubicacion_tienda');
-    const member = await interaction.guild.members.fetch(interaction.user.id);
-    if (member.voice?.channelId !== CANAL_H50) {
-      await interaction.reply({ content: '❌ Ya no estás en el canal H-50.', ephemeral: true });
-      return;
-    }
-    await interaction.deferReply({ ephemeral: true });
-    await asignarPersonal(interaction, roboKey, robo, ubicacion);
-    return;
-  }
-
   if (!interaction.isChatInputCommand()) return;
 
   const roboKey = interaction.commandName;
@@ -231,29 +223,13 @@ client.on('interactionCreate', async (interaction) => {
     return;
   }
 
-  // Tiendas: abrir modal
-  if (TIENDAS.includes(roboKey)) {
-    const modal = new ModalBuilder()
-      .setCustomId('modal_tienda_' + roboKey)
-      .setTitle('Asignar — ' + robo.nombre);
-    modal.addComponents(
-      new ActionRowBuilder().addComponents(
-        new TextInputBuilder()
-          .setCustomId('ubicacion_tienda')
-          .setLabel('Nombre del robo específico')
-          .setStyle(TextInputStyle.Short)
-          .setPlaceholder('Ej: Licorería Vespucio, 24/7 del Puerto...')
-          .setRequired(true)
-          .setMaxLength(80)
-      )
-    );
-    await interaction.showModal(modal);
-    return;
-  }
+  const cantidad  = interaction.options.getInteger('cantidad');
+  const ubicacion = TIENDAS.includes(roboKey)
+    ? interaction.options.getString('ubicacion')
+    : robo.nombre;
 
-  // Resto de robos: asignar directo
   await interaction.deferReply({ ephemeral: true });
-  await asignarPersonal(interaction, roboKey, robo, robo.nombre);
+  await asignarPersonal(interaction, roboKey, robo, cantidad, ubicacion);
 });
 
 client.login(process.env.TOKEN);
