@@ -386,7 +386,7 @@ client.on('interactionCreate', async (interaction) => {
 
   // /instructores
   if (interaction.commandName === 'instructores') {
-    const puedeUsar = interaction.member.roles.cache.has(ROL_HEAD_PFA) || interaction.member.roles.cache.has(ROL_ENCARGADO_INSTR);
+    const puedeUsar = interaction.member.roles.cache.has(ROL_HEAD_PFA) || interaction.member.roles.cache.has(ROL_ENCARGADO_INSTR) || interaction.member.roles.cache.has('1364625812032192512');
     if (!puedeUsar) { await interaction.reply({ content: '❌ No tenés permisos.', ephemeral: true }); return; }
     await interaction.deferReply({ ephemeral: true });
     const canal = await interaction.guild.channels.fetch(CANAL_RESULTADOS);
@@ -417,7 +417,7 @@ client.on('interactionCreate', async (interaction) => {
 
   // /cerrar-instructores
   if (interaction.commandName === 'cerrar-instructores') {
-    const puedeUsar = interaction.member.roles.cache.has(ROL_HEAD_PFA) || interaction.member.roles.cache.has(ROL_ENCARGADO_INSTR);
+    const puedeUsar = interaction.member.roles.cache.has(ROL_HEAD_PFA) || interaction.member.roles.cache.has(ROL_ENCARGADO_INSTR) || interaction.member.roles.cache.has('1364625812032192512');
     if (!puedeUsar) { await interaction.reply({ content: '❌ No tenés permisos.', ephemeral: true }); return; }
     await interaction.deferReply({ ephemeral: true });
     const canal = await interaction.guild.channels.fetch(CANAL_RESULTADOS);
