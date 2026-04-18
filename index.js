@@ -27,6 +27,19 @@ const ROL_INSTRUCTORES     = '1347421483164766329';
 const ROL_HEAD_PFA         = '1347421445869011046';
 const ROL_ENCARGADO_INSTR  = '1460777709147000944';
 const ROL_INSTRUCTOR_EXTRA = '1364625812032192512';
+const ROL_HIGH             = '1347421453020037182';
+
+const CANALES_TICKETS = {
+  '1347421540773269526': '📨 Apelación',
+  '1347421544095416351': '🚨 Reportes',
+  '1347421542790856727': '💰 Reintegros',
+  '1347421545890320447': '🔧 Soporte Técnico',
+};
+
+// Registro semanal de tickets: { userId: { apelacion: 0, reportes: 0, reintegros: 0, soporte: 0, total: 0 } }
+let semanaTicketsInicio = new Date(0);
+let registroTickets = {};
+const TICKETS_FILE = 'semana_tickets.json';
 
 const TIENDAS = ['tienda1', 'tienda2', 'tienda3'];
 
@@ -109,6 +122,36 @@ const origenPersonal = {};
 let semanaInicio = new Date(0); // fecha muy antigua por defecto
 let registroSemanal = {};
 const SEMANA_FILE = 'semana_instructores.json';
+
+async function guardarTickets() {
+  try {
+    const resSha = await fetch(`https://api.github.com/repos/webstudios-ar/h50-bot/contents/${TICKETS_FILE}`, {
+      headers: { 'Authorization': 'Bearer ' + process.env.GITHUB_TOKEN, 'Accept': 'application/vnd.github+json' }
+    });
+    const sha = resSha.status !== 404 ? (await resSha.json()).sha : null;
+    const body = { message: 'update tickets', content: Buffer.from(JSON.stringify({ semanaTicketsInicio: semanaTicketsInicio.toISOString(), registroTickets }, null, 2)).toString('base64') };
+    if (sha) body.sha = sha;
+    await fetch(`https://api.github.com/repos/webstudios-ar/h50-bot/contents/${TICKETS_FILE}`, {
+      method: 'PUT',
+      headers: { 'Authorization': 'Bearer ' + process.env.GITHUB_TOKEN, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+  } catch (err) { console.error('Error guardando tickets:', err.message); }
+}
+
+async function cargarTickets() {
+  try {
+    const res = await fetch(`https://api.github.com/repos/webstudios-ar/h50-bot/contents/${TICKETS_FILE}`, {
+      headers: { 'Authorization': 'Bearer ' + process.env.GITHUB_TOKEN, 'Accept': 'application/vnd.github+json' }
+    });
+    if (res.status === 404) { semanaTicketsInicio = new Date(); return; }
+    const data = await res.json();
+    const loaded = JSON.parse(Buffer.from(data.content, 'base64').toString('utf8'));
+    semanaTicketsInicio = new Date(loaded.semanaTicketsInicio);
+    Object.assign(registroTickets, loaded.registroTickets || {});
+    console.log('Tickets cargados desde:', semanaTicketsInicio.toLocaleDateString('es-AR'));
+  } catch (err) { console.error('Error cargando tickets:', err.message); semanaTicketsInicio = new Date(); }
+}
 
 async function guardarSemana() {
   try {
@@ -263,8 +306,31 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
   }
 });
 
-// ==================== CONTADOR EXAMENES ====================
+// ==================== SISTEMA DE TICKETS ====================
 client.on('messageCreate', async (message) => {
+  // Detectar tickets en los canales correspondientes
+  if (CANALES_TICKETS[message.channelId] && !message.author.bot) {
+    const categoriaTicket = CANALES_TICKETS[message.channelId];
+    const puedeAsumir = (roles) => roles.cache.has(ROL_HIGH) || roles.cache.has(ROL_HEAD_PFA);
+
+    // Mandar mensaje con boton de asumir — visible para todos pero solo funciona para los roles
+    const embed = new EmbedBuilder()
+      .setTitle('🎫 NUEVO TICKET — ' + categoriaTicket)
+      .setDescription('Apretá el botón para asumir este ticket y que quede registrado a tu nombre.')
+      .setColor(0x5865F2).setTimestamp()
+      .setFooter({ text: 'H50 Bot  •  Sistema de Tickets' });
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('TICKET_' + message.channelId + '_' + message.id)
+        .setLabel('✅  Asumir ticket')
+        .setStyle(ButtonStyle.Primary)
+    );
+
+    await message.channel.send({ embeds: [embed], components: [row] });
+  }
+
+  // ==================== CONTADOR EXAMENES ====================
   if (message.channelId !== CANAL_RESULTADOS || message.author.bot) return;
   // Detectar nota X/10 — 7 o mas = aprobado, 6 o menos = desaprobado
   const notaMatch = message.content.match(/(\d+)\/10/);
@@ -281,6 +347,7 @@ client.on('messageCreate', async (message) => {
 client.once('ready', async () => {
   console.log('H50 Bot conectado: ' + client.user.tag);
   await cargarSemana();
+  await cargarTickets();
 
   const robosChoices = Object.entries(ROBOS).map(([key, robo]) => ({ name: robo.nombre, value: key }));
   robosChoices.push({ name: 'Secuestro', value: 'secuestro_canal' });
@@ -299,6 +366,9 @@ client.once('ready', async () => {
   commands.push(new SlashCommandBuilder().setName('cancelar').setDescription('Devuelve a cada persona al canal donde estaba antes')
     .addStringOption(o => o.setName('robo').setDescription('El robo a cancelar').setRequired(true).addChoices(...robosChoices.slice(0, 25))).toJSON());
   commands.push(new SlashCommandBuilder().setName('instructores').setDescription('[HEAD] Ver estadísticas de exámenes de la semana').toJSON());
+  commands.push(new SlashCommandBuilder().setName('mis-tickets').setDescription('Ver tus estadísticas de tickets de la semana').toJSON());
+  commands.push(new SlashCommandBuilder().setName('estadisticas-tickets').setDescription('[HEAD] Ver estadísticas de tickets de todos').toJSON());
+  commands.push(new SlashCommandBuilder().setName('cerrar-tickets').setDescription('[HEAD] Cierra la semana de tickets y resetea el contador').toJSON());
   commands.push(new SlashCommandBuilder().setName('cerrar-instructores').setDescription('[HEAD] Cierra la semana y resetea el contador').toJSON());
 
   const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
@@ -308,10 +378,93 @@ client.once('ready', async () => {
 
 // ==================== INTERACTIONS ====================
 client.on('interactionCreate', async (interaction) => {
+  // Boton asumir ticket
+  if (interaction.isButton() && interaction.customId.startsWith('TICKET_')) {
+    const puedeAsumir = interaction.member.roles.cache.has(ROL_HIGH) || interaction.member.roles.cache.has(ROL_HEAD_PFA);
+    if (!puedeAsumir) {
+      await interaction.reply({ content: '❌ Solo los rangos autorizados pueden asumir tickets.', ephemeral: true });
+      return;
+    }
+
+    const partes = interaction.customId.split('_');
+    const canalId = partes[1];
+    const categoria = CANALES_TICKETS[canalId] || 'Ticket';
+    const uid = interaction.user.id;
+
+    if (!registroTickets[uid]) registroTickets[uid] = { total: 0 };
+    if (!registroTickets[uid][canalId]) registroTickets[uid][canalId] = 0;
+    registroTickets[uid][canalId]++;
+    registroTickets[uid].total++;
+    await guardarTickets();
+
+    // Deshabilitar el boton
+    const rowDone = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('TICKET_DONE')
+        .setLabel('✅ Asumido por ' + (interaction.member.displayName || interaction.user.username))
+        .setStyle(ButtonStyle.Success)
+        .setDisabled(true)
+    );
+    await interaction.update({ components: [rowDone] });
+    return;
+  }
+
   if (!interaction.isChatInputCommand()) return;
 
   const puedeInstructor = () => interaction.member.roles.cache.has(ROL_HEAD_PFA) || interaction.member.roles.cache.has(ROL_ENCARGADO_INSTR) || interaction.member.roles.cache.has(ROL_INSTRUCTOR_EXTRA);
   const enH50 = async () => { const m = await interaction.guild.members.fetch(interaction.user.id); return m.voice?.channelId === CANAL_H50; };
+
+  // /mis-tickets
+  if (interaction.commandName === 'mis-tickets') {
+    const uid = interaction.user.id;
+    const datos = registroTickets[uid];
+    const inicio = semanaTicketsInicio.toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', year: 'numeric' });
+    const hoy = new Date().toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', year: 'numeric' });
+    let detalle = 'Sin tickets asumidos esta semana.';
+    if (datos && datos.total > 0) {
+      detalle = Object.entries(CANALES_TICKETS).map(([cId, nombre]) => nombre + ': **' + (datos[cId] || 0) + '**').join('\n');
+      detalle += '\n\n📊 **Total: ' + datos.total + '**';
+    }
+    const embed = new EmbedBuilder().setTitle('🎫 MIS TICKETS — ' + (interaction.member.displayName || interaction.user.username).toUpperCase())
+      .setDescription(detalle).addFields({ name: '📅 Período', value: inicio + ' → ' + hoy, inline: true })
+      .setColor(0x5865F2).setTimestamp().setFooter({ text: 'H50 Bot  •  Sistema de Tickets' });
+    await interaction.reply({ embeds: [embed], ephemeral: true });
+    return;
+  }
+
+  // /estadisticas-tickets
+  if (interaction.commandName === 'estadisticas-tickets') {
+    const puedeUsar = interaction.member.roles.cache.has(ROL_HIGH) || interaction.member.roles.cache.has(ROL_HEAD_PFA);
+    if (!puedeUsar) { await interaction.reply({ content: '❌ No tenés permisos.', ephemeral: true }); return; }
+    const inicio = semanaTicketsInicio.toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', year: 'numeric' });
+    const hoy = new Date().toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', year: 'numeric' });
+    const filas = Object.keys(registroTickets).length > 0
+      ? Object.entries(registroTickets).map(([uid, d]) => '<@' + uid + '> — 📊 **' + (d.total || 0) + ' total**').join('\n')
+      : 'Sin tickets registrados esta semana.';
+    const embed = new EmbedBuilder().setTitle('🎫 ESTADÍSTICAS DE TICKETS').setDescription(filas)
+      .addFields({ name: '📅 Período', value: inicio + ' → ' + hoy, inline: true })
+      .setColor(0x5865F2).setTimestamp().setFooter({ text: 'H50 Bot  •  Sistema de Tickets' });
+    await interaction.reply({ embeds: [embed], ephemeral: true });
+    return;
+  }
+
+  // /cerrar-tickets
+  if (interaction.commandName === 'cerrar-tickets') {
+    const puedeUsar = interaction.member.roles.cache.has(ROL_HIGH) || interaction.member.roles.cache.has(ROL_HEAD_PFA);
+    if (!puedeUsar) { await interaction.reply({ content: '❌ No tenés permisos.', ephemeral: true }); return; }
+    const inicio = semanaTicketsInicio.toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', year: 'numeric' });
+    const hoy = new Date().toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', year: 'numeric' });
+    const filas = Object.keys(registroTickets).length > 0
+      ? Object.entries(registroTickets).map(([uid, d]) => '<@' + uid + '> — 📊 **' + (d.total || 0) + ' total**').join('\n')
+      : 'Sin tickets registrados esta semana.';
+    const embed = new EmbedBuilder().setTitle('🔒 SEMANA CERRADA — TICKETS').setDescription(filas)
+      .addFields({ name: '📅 Período', value: inicio + ' → ' + hoy, inline: true }, { name: '👮 Cerrado por', value: '<@' + interaction.user.id + '>', inline: true })
+      .setColor(0xCC2222).setTimestamp().setFooter({ text: 'H50 Bot  •  Sistema de Tickets' });
+    semanaTicketsInicio = new Date(); registroTickets = {};
+    await guardarTickets();
+    await interaction.reply({ embeds: [embed], ephemeral: true });
+    return;
+  }
 
   // /instructores
   if (interaction.commandName === 'instructores') {
