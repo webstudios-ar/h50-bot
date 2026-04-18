@@ -29,7 +29,8 @@ const ROL_ENCARGADO_INSTR  = '1460777709147000944';
 const ROL_INSTRUCTOR_EXTRA = '1364625812032192512';
 const ROL_HIGH             = '1347421453020037182';
 
-const CANALES_TICKETS = {
+// IDs de CATEGORIAS de tickets (no canales individuales)
+const CATEGORIAS_TICKETS = {
   '1347421540773269526': '📨 Apelación',
   '1347421544095416351': '🚨 Reportes',
   '1347421542790856727': '💰 Reintegros',
@@ -309,8 +310,8 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
 // ==================== SISTEMA DE TICKETS ====================
 client.on('messageCreate', async (message) => {
   // Detectar tickets en los canales correspondientes
-  if (CANALES_TICKETS[message.channelId] && message.author.id !== client.user.id) {
-    const categoriaTicket = CANALES_TICKETS[message.channelId];
+  const categoriaTicket = CATEGORIAS_TICKETS[message.channel.parentId];
+  if (categoriaTicket && message.author.id !== client.user.id) {
     const puedeAsumir = (roles) => roles.cache.has(ROL_HIGH) || roles.cache.has(ROL_HEAD_PFA);
 
     // Mandar mensaje con boton de asumir — visible para todos pero solo funciona para los roles
@@ -322,7 +323,7 @@ client.on('messageCreate', async (message) => {
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
-        .setCustomId('TICKET_' + message.channelId + '_' + message.id)
+        .setCustomId('TICKET_' + message.channel.parentId + '_' + message.id)
         .setLabel('✅  Asumir ticket')
         .setStyle(ButtonStyle.Primary)
     );
@@ -387,13 +388,13 @@ client.on('interactionCreate', async (interaction) => {
     }
 
     const partes = interaction.customId.split('_');
-    const canalId = partes[1];
-    const categoria = CANALES_TICKETS[canalId] || 'Ticket';
+    const categoriaId = partes[1];
+    const categoria = CATEGORIAS_TICKETS[categoriaId] || 'Ticket';
     const uid = interaction.user.id;
 
     if (!registroTickets[uid]) registroTickets[uid] = { total: 0 };
-    if (!registroTickets[uid][canalId]) registroTickets[uid][canalId] = 0;
-    registroTickets[uid][canalId]++;
+    if (!registroTickets[uid][categoriaId]) registroTickets[uid][categoriaId] = 0;
+    registroTickets[uid][categoriaId]++;
     registroTickets[uid].total++;
     await guardarTickets();
 
@@ -422,7 +423,7 @@ client.on('interactionCreate', async (interaction) => {
     const hoy = new Date().toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', year: 'numeric' });
     let detalle = 'Sin tickets asumidos esta semana.';
     if (datos && datos.total > 0) {
-      detalle = Object.entries(CANALES_TICKETS).map(([cId, nombre]) => nombre + ': **' + (datos[cId] || 0) + '**').join('\n');
+      detalle = Object.entries(CATEGORIAS_TICKETS).map(([cId, nombre]) => nombre + ': **' + (datos[cId] || 0) + '**').join('\n');
       detalle += '\n\n📊 **Total: ' + datos.total + '**';
     }
     const embed = new EmbedBuilder().setTitle('🎫 MIS TICKETS — ' + (interaction.member.displayName || interaction.user.username).toUpperCase())
