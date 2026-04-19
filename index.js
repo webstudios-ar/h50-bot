@@ -380,10 +380,8 @@ client.on('messageCreate', async (message) => {
   const categoriaTicket = CATEGORIAS_TICKETS[message.channel.parentId];
   if (categoriaTicket && message.author.id !== client.user.id) {
     try {
-      // Verificar si ya existe un boton del bot en este canal — no spamear
-      const mensajesRecientes = await message.channel.messages.fetch({ limit: 20 });
-      const yaExiste = mensajesRecientes.find(m => m.author.id === client.user.id && m.components.length > 0);
-      if (yaExiste) return;
+      // Si el canal ya tiene un ticket activo registrado, no mandar otro boton
+      if (ticketsActivos[message.channelId]) return;
 
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
