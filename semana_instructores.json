@@ -1,4 +1,9 @@
 {
   "semanaInicio": "2026-04-19T05:46:30.871Z",
-  "registroSemanal": {}
+  "registroSemanal": {
+    "730549913271664690": {
+      "aprobados": 0,
+      "desaprobados": 1
+    }
+  }
 }
