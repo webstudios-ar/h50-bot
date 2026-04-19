@@ -43,9 +43,6 @@ let semanaTicketsInicio = new Date(0);
 let registroTickets = {};
 const TICKETS_FILE = 'semana_tickets.json';
 
-// Canales donde ya se mandó el embed de asumir (para no spamear)
-const ticketsYaAvisados = new Set();
-
 const TIENDAS = ['tienda1', 'tienda2', 'tienda3'];
 
 const CANALES_INDIVIDUALES = [
@@ -334,23 +331,21 @@ client.on('messageCreate', async (message) => {
   // Detectar tickets en los canales correspondientes
   const categoriaTicket = CATEGORIAS_TICKETS[message.channel.parentId];
   if (categoriaTicket && message.author.id !== client.user.id) {
-    const puedeAsumir = (roles) => roles.cache.has(ROL_HIGH) || roles.cache.has(ROL_HEAD_PFA);
+    try {
+      // Verificar si ya existe un boton del bot en este canal — no spamear
+      const mensajesRecientes = await message.channel.messages.fetch({ limit: 20 });
+      const yaExiste = mensajesRecientes.find(m => m.author.id === client.user.id && m.components.length > 0);
+      if (yaExiste) return;
 
-    // Mandar mensaje con boton de asumir — visible para todos pero solo funciona para los roles
-    const embed = new EmbedBuilder()
-      .setTitle('🎫 NUEVO TICKET — ' + categoriaTicket)
-      .setDescription('Apretá el botón para asumir este ticket y que quede registrado a tu nombre.')
-      .setColor(0x5865F2).setTimestamp()
-      .setFooter({ text: 'H50 Bot  •  Sistema de Tickets' });
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId('TICKET_' + message.channel.parentId + '_' + message.id)
+          .setLabel('✅ Asumir ticket')
+          .setStyle(ButtonStyle.Primary)
+      );
 
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId('TICKET_' + message.channel.parentId + '_' + message.id)
-        .setLabel('✅  Asumir ticket')
-        .setStyle(ButtonStyle.Primary)
-    );
-
-    await message.channel.send({ embeds: [embed], components: [row] });
+      await message.channel.send({ content: '**' + categoriaTicket + '** — ¿Quién asume este ticket?', components: [row] });
+    } catch (e) { console.error('Error ticket:', e.message); }
   }
 
   // ==================== CONTADOR EXAMENES ====================
