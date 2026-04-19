@@ -297,7 +297,7 @@ async function asignarPersonal(interaction, roboKey, robo, cantidad, ubicacion) 
     catch (e) { errores.push(p.displayName); }
   }
 
-  try { await canalDestino.setStatus(ubicacion); } catch (e) {}
+  try { await canalDestino.setStatus(ubicacion); } catch (e) { console.error('Error setStatus:', e.message); }
 
   const info = INFO_ROBOS[roboKey];
   const embed = new EmbedBuilder()
