@@ -1,21 +1,4 @@
 {
-  "semanaInicio": "2026-04-19T02:36:23.704Z",
-  "registroSemanal": {
-    "1276349066439032836": {
-      "aprobados": 1,
-      "desaprobados": 1
-    },
-    "1233880038114594866": {
-      "aprobados": 1,
-      "desaprobados": 0
-    },
-    "631623278439694387": {
-      "aprobados": 1,
-      "desaprobados": 0
-    },
-    "678193547073028096": {
-      "aprobados": 1,
-      "desaprobados": 0
-    }
-  }
+  "semanaInicio": "2026-04-19T05:46:30.871Z",
+  "registroSemanal": {}
 }
