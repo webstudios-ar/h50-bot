@@ -578,6 +578,8 @@ client.on('interactionCreate', async (interaction) => {
     const movidos = [], errores = [];
     for (const p of enCanal) { try { await p.voice.setChannel(CANALES_INDIVIDUALES[0]); movidos.push(p); } catch (e) { errores.push(p.displayName); } }
     delete origenPersonal[canalALiberar];
+    // Borrar el estado del canal
+    try { const ch = await interaction.guild.channels.fetch(canalALiberar); await ch.setStatus(''); } catch (e) {}
     const embed = new EmbedBuilder().setTitle('✅ LIBERADOS — ' + nombreALiberar.toUpperCase())
       .setDescription('Personal devuelto a **Esperando Asignación**.')
       .addFields({ name: '👮 Personal liberado', value: movidos.map(m => '<@' + m.id + '>').join('\n') || 'Ninguno', inline: false }, { name: '👮 Ejecutado por', value: '<@' + interaction.user.id + '>', inline: true })
@@ -604,6 +606,8 @@ client.on('interactionCreate', async (interaction) => {
       try { await p.voice.setChannel(orig); movidos.push({ p, orig }); } catch (e) { errores.push(p.displayName); }
     }
     delete origenPersonal[canalALiberar];
+    // Borrar el estado del canal
+    try { const ch = await interaction.guild.channels.fetch(canalALiberar); await ch.setStatus(''); } catch (e) {}
     const embed = new EmbedBuilder().setTitle('↩️ CANCELADO — ' + nombreALiberar.toUpperCase())
       .setDescription('Robo cancelado. Personal devuelto a su canal de origen.')
       .addFields({ name: '👮 Personal devuelto', value: movidos.map(({ p, orig }) => '<@' + p.id + '> → <#' + orig + '>').join('\n') || 'Ninguno', inline: false }, { name: '👮 Ejecutado por', value: '<@' + interaction.user.id + '>', inline: true })
