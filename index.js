@@ -43,6 +43,9 @@ let semanaTicketsInicio = new Date(0);
 let registroTickets = {};
 const TICKETS_FILE = 'semana_tickets.json';
 
+// Canales donde ya se mandó el embed de asumir (para no spamear)
+const ticketsYaAvisados = new Set();
+
 const TIENDAS = ['tienda1', 'tienda2', 'tienda3'];
 
 const CANALES_INDIVIDUALES = [
@@ -60,32 +63,32 @@ const CANALES_PATRULLA = [
 ];
 
 const ROBOS = {
-  tienda1:        { canal: '1362914142851436774', nombre: 'Tienda 1',             min: 1  },
-  tienda2:        { canal: '1453978522875068426', nombre: 'Tienda 2',             min: 1  },
-  tienda3:        { canal: '1362913398827913416', nombre: 'Tienda 3',             min: 1  },
-  facebook:       { canal: '1362287835587154071', nombre: 'Facebook',             min: 4  },
-  bancocentral:   { canal: '1362513426651283709', nombre: 'Banco Central',        min: 7  },
-  humane:         { canal: '1365399784508227584', nombre: 'Humane',               min: 7  },
-  fleecacosta:    { canal: '1374468389493280828', nombre: 'Fleeca Costa',         min: 3  },
-  fleecalife:     { canal: '1365400107440275526', nombre: 'Fleeca Life',          min: 3  },
-  fleecataller:   { canal: '1362513464672649437', nombre: 'Fleeca Taller',        min: 3  },
-  fleecapaleto:   { canal: '1378143656761884754', nombre: 'Fleeca Paleto',        min: 3  },
-  fleecaayunta:   { canal: '1362513448189169735', nombre: 'Fleeca Ayuntamiento',  min: 3  },
-  fleecasandy:    { canal: '1398041090694582333', nombre: 'Fleeca Sandy Shores',  min: 3  },
-  mazebank:       { canal: '1362513386314662173', nombre: 'Maze Bank',            min: 2  },
-  mansion:        { canal: '1362916819014258718', nombre: 'Mansión',              min: 3  },
-  museo:          { canal: '1365400052058820853', nombre: 'Museo',                min: 5  },
-  joyeria:        { canal: '1362916726840365296', nombre: 'Joyería',              min: 2  },
-  subteprincipal: { canal: '1452721020984103044', nombre: 'Subte Principal',      min: 3  },
-  subtebahamas:   { canal: '1452721517782896640', nombre: 'Subte Bahamas',        min: 3  },
-  subtegaraje:    { canal: '1452721435117093065', nombre: 'Subte Garaje',         min: 3  },
-  subteaero:      { canal: '1452721685043220583', nombre: 'Subte Aeropuerto',     min: 3  },
-  carniceria:     { canal: '1362513481206730893', nombre: 'Carnicería',           min: 7  },
-  estadio:        { canal: '1362916764370866247', nombre: 'Estadio',              min: 3  },
-  yate:           { canal: '1362915313594794104', nombre: 'Yate',                 min: 4  },
-  fabrica:        { canal: '1365400767678119996', nombre: 'Fábrica',              min: 7  },
-  rancho:         { canal: '1363190192516759812', nombre: 'Rancho Abandonado',    min: 4  },
-  fundidora:      { canal: '1403610575518302328', nombre: 'Fundidora',            min: 4  },
+  tienda1:        { canal: '1362914142851436774', nombre: 'Tienda 1',             min: 1,  max: 3  },
+  tienda2:        { canal: '1453978522875068426', nombre: 'Tienda 2',             min: 1,  max: 3  },
+  tienda3:        { canal: '1362913398827913416', nombre: 'Tienda 3',             min: 1,  max: 3  },
+  facebook:       { canal: '1362287835587154071', nombre: 'Facebook',             min: 4,  max: 6  },
+  bancocentral:   { canal: '1362513426651283709', nombre: 'Banco Central',        min: 7,  max: 15 },
+  humane:         { canal: '1365399784508227584', nombre: 'Humane',               min: 7,  max: 15 },
+  fleecacosta:    { canal: '1374468389493280828', nombre: 'Fleeca Costa',         min: 3,  max: 6  },
+  fleecalife:     { canal: '1365400107440275526', nombre: 'Fleeca Life',          min: 3,  max: 6  },
+  fleecataller:   { canal: '1362513464672649437', nombre: 'Fleeca Taller',        min: 3,  max: 6  },
+  fleecapaleto:   { canal: '1378143656761884754', nombre: 'Fleeca Paleto',        min: 3,  max: 6  },
+  fleecaayunta:   { canal: '1362513448189169735', nombre: 'Fleeca Ayuntamiento',  min: 3,  max: 6  },
+  fleecasandy:    { canal: '1398041090694582333', nombre: 'Fleeca Sandy Shores',  min: 3,  max: 6  },
+  mazebank:       { canal: '1362513386314662173', nombre: 'Maze Bank',            min: 2,  max: 6  },
+  mansion:        { canal: '1362916819014258718', nombre: 'Mansión',              min: 3,  max: 6  },
+  museo:          { canal: '1365400052058820853', nombre: 'Museo',                min: 5,  max: 8  },
+  joyeria:        { canal: '1362916726840365296', nombre: 'Joyería',              min: 2,  max: 5  },
+  subteprincipal: { canal: '1452721020984103044', nombre: 'Subte Principal',      min: 3,  max: 6  },
+  subtebahamas:   { canal: '1452721517782896640', nombre: 'Subte Bahamas',        min: 3,  max: 6  },
+  subtegaraje:    { canal: '1452721435117093065', nombre: 'Subte Garaje',         min: 3,  max: 6  },
+  subteaero:      { canal: '1452721685043220583', nombre: 'Subte Aeropuerto',     min: 3,  max: 6  },
+  carniceria:     { canal: '1362513481206730893', nombre: 'Carnicería',           min: 7,  max: 12 },
+  estadio:        { canal: '1362916764370866247', nombre: 'Estadio',              min: 3,  max: 7  },
+  yate:           { canal: '1362915313594794104', nombre: 'Yate',                 min: 4,  max: 6  },
+  fabrica:        { canal: '1365400767678119996', nombre: 'Fábrica',              min: 7,  max: 12 },
+  rancho:         { canal: '1363190192516759812', nombre: 'Rancho Abandonado',    min: 4,  max: 6  },
+  fundidora:      { canal: '1403610575518302328', nombre: 'Fundidora',            min: 4,  max: 6  },
 };
 
 const INFO_ROBOS = {
@@ -211,6 +214,24 @@ async function asignarPersonal(interaction, roboKey, robo, cantidad, ubicacion) 
 
   const totalDisponible = individuales.length + gruposPatrulla.reduce((a, g) => a + g.length, 0);
   if (totalDisponible === 0) { await interaction.editReply({ content: '❌ No hay personal disponible.' }); return; }
+
+  // Verificar que no se pase del maximo permitido
+  if (robo.max && cantidad > robo.max) {
+    await interaction.editReply({ content: '❌ El máximo de policías para **' + robo.nombre + '** es **' + robo.max + '**. No podés asignar ' + cantidad + '.' });
+    return;
+  }
+
+  // Contar cuantos ya hay en el canal del robo
+  const yaEnCanal = interaction.guild.voiceStates.cache.filter(vs => vs.channelId === robo.canal && vs.member && !vs.member.user.bot).size;
+  if (robo.max && (yaEnCanal + cantidad) > robo.max) {
+    const puedoMandar = robo.max - yaEnCanal;
+    if (puedoMandar <= 0) {
+      await interaction.editReply({ content: '❌ El canal de **' + robo.nombre + '** ya tiene el máximo de ' + robo.max + ' policías.' });
+      return;
+    }
+    await interaction.editReply({ content: '⚠️ Solo puedo asignar **' + puedoMandar + '** más — el canal ya tiene ' + yaEnCanal + ' y el máximo es ' + robo.max + '. Confirmá con /' + robo.nombre.toLowerCase().replace(/ /g, '') + ' ' + puedoMandar + '.' });
+    return;
+  }
 
   let asignados = [], restante = cantidad;
   for (const p of individuales) { if (restante <= 0) break; asignados.push(p); restante--; }
@@ -398,6 +419,9 @@ client.on('interactionCreate', async (interaction) => {
     registroTickets[uid][categoriaId]++;
     registroTickets[uid].total++;
     await guardarTickets();
+
+    // Sacar del set de avisados para que si se abre otro ticket en el mismo canal se avise de nuevo
+    // (no lo sacamos — el canal de ticket es uno por ticket, una vez asumido no necesita mas aviso)
 
     // Deshabilitar el boton
     const rowDone = new ActionRowBuilder().addComponents(
