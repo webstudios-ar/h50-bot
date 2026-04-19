@@ -22,6 +22,7 @@ const CANAL_EXAMEN         = '1347421594137530459';
 const CANAL_INSTRUCTORES   = '1347421603935424525';
 const CANAL_RESULTADOS     = '1347421583781920849';
 const CANAL_LOGS           = '1495016854807121980';
+const CANAL_ASCENSOS       = '1370572245281407046';
 const CANAL_ESPERANDO      = '1355660648910032976';
 const CANAL_SECUESTRO      = '1363375107078361098';
 const ROL_INSTRUCTORES     = '1347421483164766329';
@@ -42,6 +43,8 @@ const CATEGORIAS_TICKETS = {
 let semanaTicketsInicio = new Date(0);
 let registroTickets = {};
 const TICKETS_FILE = 'semana_tickets.json';
+const TICKETS_ACTIVOS_FILE = 'tickets_activos.json';
+let ticketsActivos = {}; // { canalId: { categoriaId, messageId } }
 
 const TIENDAS = ['tienda1', 'tienda2', 'tienda3'];
 
@@ -124,6 +127,35 @@ const origenPersonal = {};
 let semanaInicio = new Date(0); // fecha muy antigua por defecto
 let registroSemanal = {};
 const SEMANA_FILE = 'semana_instructores.json';
+
+async function guardarTicketsActivos() {
+  try {
+    const resSha = await fetch(`https://api.github.com/repos/webstudios-ar/h50-bot/contents/${TICKETS_ACTIVOS_FILE}`, {
+      headers: { 'Authorization': 'Bearer ' + process.env.GITHUB_TOKEN, 'Accept': 'application/vnd.github+json' }
+    });
+    const sha = resSha.status !== 404 ? (await resSha.json()).sha : null;
+    const body = { message: 'update tickets activos', content: Buffer.from(JSON.stringify(ticketsActivos, null, 2)).toString('base64') };
+    if (sha) body.sha = sha;
+    await fetch(`https://api.github.com/repos/webstudios-ar/h50-bot/contents/${TICKETS_ACTIVOS_FILE}`, {
+      method: 'PUT',
+      headers: { 'Authorization': 'Bearer ' + process.env.GITHUB_TOKEN, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+  } catch (err) { console.error('Error guardando tickets activos:', err.message); }
+}
+
+async function cargarTicketsActivos() {
+  try {
+    const res = await fetch(`https://api.github.com/repos/webstudios-ar/h50-bot/contents/${TICKETS_ACTIVOS_FILE}`, {
+      headers: { 'Authorization': 'Bearer ' + process.env.GITHUB_TOKEN, 'Accept': 'application/vnd.github+json' }
+    });
+    if (res.status === 404) return;
+    const data = await res.json();
+    const loaded = JSON.parse(Buffer.from(data.content, 'base64').toString('utf8'));
+    Object.assign(ticketsActivos, loaded);
+    console.log('Tickets activos cargados:', Object.keys(ticketsActivos).length);
+  } catch (err) { console.error('Error cargando tickets activos:', err.message); }
+}
 
 async function guardarTickets() {
   try {
@@ -231,12 +263,28 @@ async function asignarPersonal(interaction, roboKey, robo, cantidad, ubicacion) 
   }
 
   let asignados = [], restante = cantidad;
+
+  // Primero tomar individuales
   for (const p of individuales) { if (restante <= 0) break; asignados.push(p); restante--; }
+
+  // Luego tomar de grupos de patrulla
   if (restante > 0) {
     for (const grupo of gruposPatrulla) {
       if (restante <= 0) break;
-      asignados.push(...grupo);
-      restante = Math.max(0, restante - grupo.length);
+      if (grupo.length <= restante) {
+        // El grupo entra completo
+        asignados.push(...grupo);
+        restante -= grupo.length;
+      } else if (TIENDAS.includes(roboKey)) {
+        // Solo para tiendas: romper el grupo y tomar los necesarios aleatoriamente
+        const mezclado = [...grupo].sort(() => Math.random() - 0.5);
+        asignados.push(...mezclado.slice(0, restante));
+        restante = 0;
+      } else {
+        // Para otros robos: mandar el grupo completo aunque supere lo pedido
+        asignados.push(...grupo);
+        restante = 0;
+      }
     }
   }
 
@@ -344,7 +392,9 @@ client.on('messageCreate', async (message) => {
           .setStyle(ButtonStyle.Primary)
       );
 
-      await message.channel.send({ content: '**' + categoriaTicket + '** — ¿Quién asume este ticket?', components: [row] });
+      const msgEnviado = await message.channel.send({ content: '**' + categoriaTicket + '** — ¿Quién asume este ticket?', components: [row] });
+      ticketsActivos[message.channelId] = { categoriaId: message.channel.parentId, messageId: msgEnviado.id };
+      await guardarTicketsActivos();
     } catch (e) { console.error('Error ticket:', e.message); }
   }
 
@@ -366,6 +416,7 @@ client.once('ready', async () => {
   console.log('H50 Bot conectado: ' + client.user.tag);
   await cargarSemana();
   await cargarTickets();
+  await cargarTicketsActivos();
 
   const robosChoices = Object.entries(ROBOS).map(([key, robo]) => ({ name: robo.nombre, value: key }));
   robosChoices.push({ name: 'Secuestro', value: 'secuestro_canal' });
@@ -417,6 +468,13 @@ client.on('interactionCreate', async (interaction) => {
 
     // Sacar del set de avisados para que si se abre otro ticket en el mismo canal se avise de nuevo
     // (no lo sacamos — el canal de ticket es uno por ticket, una vez asumido no necesita mas aviso)
+
+    // Sacar de tickets activos
+    const canalIdAsumido = interaction.channelId;
+    if (ticketsActivos[canalIdAsumido]) {
+      delete ticketsActivos[canalIdAsumido];
+      await guardarTicketsActivos();
+    }
 
     // Deshabilitar el boton
     const rowDone = new ActionRowBuilder().addComponents(
@@ -483,7 +541,12 @@ client.on('interactionCreate', async (interaction) => {
       .setColor(0xCC2222).setTimestamp().setFooter({ text: 'H50 Bot  •  Sistema de Tickets' });
     semanaTicketsInicio = new Date(); registroTickets = {};
     await guardarTickets();
-    await interaction.reply({ embeds: [embed], ephemeral: true });
+    // Publicar en canal ascensos
+    try {
+      const canalAscensos = await interaction.guild.channels.fetch(CANAL_ASCENSOS);
+      await canalAscensos.send({ embeds: [embed] });
+    } catch (e) { console.error('Error enviando a ascensos:', e.message); }
+    await interaction.reply({ content: '✅ Semana cerrada. Resumen publicado en <#' + CANAL_ASCENSOS + '>.', ephemeral: true });
     return;
   }
 
