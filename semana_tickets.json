@@ -1,4 +1,9 @@
 {
   "semanaTicketsInicio": "2026-04-19T05:45:09.332Z",
-  "registroTickets": {}
+  "registroTickets": {
+    "696160444083077121": {
+      "total": 1,
+      "1347421545890320447": 1
+    }
+  }
 }
