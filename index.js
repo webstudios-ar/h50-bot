@@ -398,8 +398,10 @@ client.on('messageCreate', async (message) => {
       ticketsActivos[message.channelId].messageId = msgEnviado.id;
       await guardarTicketsActivos();
     } catch (e) {
-      // Si fallo, limpiar para que pueda intentar de nuevo
-      delete ticketsActivos[message.channelId];
+      // Solo limpiar si es un error permanente (canal no existe, sin permisos)
+      // No limpiar si es error de red/timeout para no mandar doble mensaje
+      const errPermanente = e.code === 10003 || e.code === 50013 || e.code === 50001;
+      if (errPermanente) delete ticketsActivos[message.channelId];
       console.error('Error ticket:', e.message);
     }
   }
