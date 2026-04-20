@@ -297,7 +297,10 @@ async function asignarPersonal(interaction, roboKey, robo, cantidad, ubicacion) 
     catch (e) { errores.push(p.displayName); }
   }
 
-  try { await canalDestino.setStatus(ubicacion); } catch (e) { console.error('Error setStatus:', e.message); }
+  try {
+    const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
+    await rest.put(`/channels/${robo.canal}/voice-status`, { body: { status: ubicacion } });
+  } catch (e) { console.error('Error setStatus:', e.message); }
 
   const info = INFO_ROBOS[roboKey];
   const embed = new EmbedBuilder()
@@ -379,10 +382,11 @@ client.on('messageCreate', async (message) => {
   // Detectar tickets en los canales correspondientes
   const categoriaTicket = CATEGORIAS_TICKETS[message.channel.parentId];
   if (categoriaTicket && message.author.id !== client.user.id) {
+    // Lock en memoria + persistencia para evitar doble mensaje
+    if (ticketsActivos[message.channelId]) return;
+    // Marcar inmediatamente en memoria antes del await para evitar race condition
+    ticketsActivos[message.channelId] = { categoriaId: message.channel.parentId, messageId: null };
     try {
-      // Si el canal ya tiene un ticket activo registrado, no mandar otro boton
-      if (ticketsActivos[message.channelId]) return;
-
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId('TICKET_' + message.channel.parentId + '_' + message.id)
@@ -391,9 +395,13 @@ client.on('messageCreate', async (message) => {
       );
 
       const msgEnviado = await message.channel.send({ content: '**' + categoriaTicket + '** — ¿Quién asume este ticket?', components: [row] });
-      ticketsActivos[message.channelId] = { categoriaId: message.channel.parentId, messageId: msgEnviado.id };
+      ticketsActivos[message.channelId].messageId = msgEnviado.id;
       await guardarTicketsActivos();
-    } catch (e) { console.error('Error ticket:', e.message); }
+    } catch (e) {
+      // Si fallo, limpiar para que pueda intentar de nuevo
+      delete ticketsActivos[message.channelId];
+      console.error('Error ticket:', e.message);
+    }
   }
 
   // ==================== CONTADOR EXAMENES ====================
