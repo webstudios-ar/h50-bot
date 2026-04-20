@@ -477,12 +477,9 @@ client.on('interactionCreate', async (interaction) => {
     // Sacar del set de avisados para que si se abre otro ticket en el mismo canal se avise de nuevo
     // (no lo sacamos — el canal de ticket es uno por ticket, una vez asumido no necesita mas aviso)
 
-    // Sacar de tickets activos
-    const canalIdAsumido = interaction.channelId;
-    if (ticketsActivos[canalIdAsumido]) {
-      delete ticketsActivos[canalIdAsumido];
-      await guardarTicketsActivos();
-    }
+    // Marcar como asumido pero NO borrar del registro para que no mande otro boton
+    ticketsActivos[interaction.channelId] = { ...ticketsActivos[interaction.channelId], asumido: true, asumidoPor: interaction.user.id };
+    await guardarTicketsActivos();
 
     // Deshabilitar el boton
     const rowDone = new ActionRowBuilder().addComponents(
